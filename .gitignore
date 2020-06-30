@@ -1,0 +1,23 @@
+node_modules
+*.log
+packages/e2e-testing/scripts/data
+dist
+.DS_Store
+
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+lerna-debug.log*
+*.tsbuildinfo
+.etherlime-store/
+
+# we create the npmrc on ci, as a way of passing credentials to yarn
+# if we don't gitignore, lerna thinks the working tree had uncommited changes
+# and refuses to publish
+.npmrc
+
+coverage
+

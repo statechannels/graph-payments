@@ -1,0 +1,4 @@
+{
+  "messageFormat": "[{module}] {msg}",
+  "ignore": "hostname"
+}

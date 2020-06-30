@@ -1,0 +1,19 @@
+{
+  "extends": "../../tsconfig.json",
+  "compilerOptions": {
+    "esModuleInterop": true,
+    "noImplicitAny": false,
+    "noUnusedLocals": true,
+    "outDir": "lib",
+    "types": ["jest"]
+  },
+  "include": [
+    "src",
+    "test",
+    "deployment",
+    "artifacts/contracts/AttestationApp.sol/AttestationApp.json",
+    "artifacts/contracts/AttestationStateMachine.sol/AttestationStateMachine.json",
+    "artifacts/contracts/AttestationUtils.sol/AttestationUtils.json"
+  ],
+  "exclude": ["node_modules", "jest", "lib"]
+}

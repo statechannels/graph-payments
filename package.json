@@ -1,0 +1,34 @@
+{
+  "name": "graph-payments",
+  "version": "0.0.1",
+  "author": "Andrew Stewart <andrew.gord.stewart@gmail.com>",
+  "devDependencies": {
+    "@commitlint/cli": "^11.0.0",
+    "@commitlint/config-conventional": "^11.0.0",
+    "husky": "4.2.5",
+    "lerna": "3.16.4",
+    "patch-package": "^6.2.2",
+    "postinstall-postinstall": "^2.1.0"
+  },
+  "engines": {
+    "yarn": "^1.17.0",
+    "node": "^12.16.3"
+  },
+  "private": true,
+  "repository": "https://github.com/statechannels/graph-payments.git",
+  "scripts": {
+    "lint:commit": "yarn commitlint --from=HEAD~1 --verbose",
+    "clean": "git clean -Xdi --exclude='!.env'",
+    "lint:check": "lerna run lint:check --no-sort --no-bail -- --max-warnings=0",
+    "lint:write": "lerna run lint:write --no-sort --no-bail",
+    "prepare": "test -n \"$SKIP_PREPARE\" || lerna run --stream prepare",
+    "postinstall": "patch-package",
+    "test": "lerna run test",
+    "test:ci": "lerna run test:ci --stream --no-sort --include-dependents"
+  },
+  "workspaces": {
+    "packages": [
+      "packages/*"
+    ]
+  }
+}

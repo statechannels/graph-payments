@@ -1,0 +1,257 @@
+version: 2.1
+orbs:
+  wait-for: cobli/wait-for@0.0.2
+
+defaults: &defaults
+  environment:
+    POSTGRES_USER: postgres
+    SERVER_DB_USER: postgres
+    POSTGRES_PASSWORD: ''
+    PAYMENT_MANAGER_CONNECTION: postgresql://postgres@localhost/payer
+    SKIP_EVM_VALIDATION: 'true'
+
+save_dep: &save_dep
+  save_cache:
+    key: v0-dependency-cache-{{ checksum "yarn.lock" }}
+    paths:
+      - ~/.cache/yarn
+      - node_modules
+      - packages/e2e-testing/node_modules
+      - packages/payments/node_modules
+      - packages/receipts/node_modules
+      - packages/statechannels-contracts/node_modules
+
+restore_dep: &restore_dep
+  restore_cache:
+    key: v0-dependency-cache-{{ checksum "yarn.lock" }}
+
+commands:
+  install_postgresql_client:
+    description: 'Install postgresql client'
+    steps:
+      - run:
+          name: Install netcat
+          command: sudo apt install --assume-yes netcat
+      - run:
+          command: |
+            seq 1 8 | xargs -I{} mkdir -p /usr/share/man/man{} 
+            sudo apt-get update
+            sudo apt install -y postgresql-client || true
+  create_db:
+    description: 'Creates a database'
+    parameters:
+      db:
+        type: string
+    steps:
+      - wait-for/port:
+          host: 0.0.0.0
+          port: 5432
+      - run:
+          name: 'Create the database'
+          command: |
+            psql -h localhost -p 5432 -U postgres \
+            -c "CREATE DATABASE <<parameters.db>>"
+      - run:
+          name: create schema
+          path: packages/payments
+          environment:
+            PAYMENT_MANAGER_CONNECTION: postgresql://postgres@localhost/<<parameters.db>>
+          command: yarn db:create_schema
+jobs:
+  profile:
+    docker:
+      - image: geoknee/statechannels:12.18-solc0.7.4 # Fast contract compilation with solc installed
+      - image: circleci/postgres:11.2-alpine-postgis
+    <<: *defaults
+    steps:
+      - checkout
+      - attach_workspace:
+          at: ~/project
+      - run:
+          name: Install wrk
+          command: sudo apt install --assume-yes wrk
+      - install_postgresql_client
+      - create_db:
+          db: payer
+      - create_db:
+          db: receipt
+      - run:
+          path: 'packages/e2e-testing'
+          command: 'npx ts-node ./scripts/flamegraphs.ts'
+      - store_artifacts:
+          path: ~/project/packages/e2e-testing/.clinic
+
+  profile-threaded:
+    docker:
+      - image: geoknee/statechannels:12.18-solc0.7.4 # Fast contract compilation with solc installed
+      - image: circleci/postgres:11.2-alpine-postgis
+    <<: *defaults
+    steps:
+      - checkout
+      - attach_workspace:
+          at: ~/project
+      - run:
+          name: Install wrk
+          command: sudo apt install --assume-yes wrk
+      - install_postgresql_client
+      - create_db:
+          db: payer
+      - create_db:
+          db: receipt
+      - run:
+          path: 'packages/e2e-testing'
+          command: 'AMOUNT_OF_WORKER_THREADS=6 npx ts-node ./scripts/flamegraphs.ts'
+      - store_artifacts:
+          path: ~/project/packages/e2e-testing/.clinic
+
+  test:
+    docker:
+      - image: geoknee/statechannels:12.18-solc0.7.4 # Fast contract compilation with solc installed
+      - image: circleci/postgres:11.2-alpine-postgis
+    <<: *defaults
+    steps:
+      - checkout
+      - attach_workspace:
+          at: ~/project
+      - install_postgresql_client
+      - create_db:
+          db: payer
+      - create_db:
+          db: receipt_manager
+
+      - run:
+          name: payment manager tests
+          path: packages/payments
+          command: yarn test
+      - run:
+          name: receipt manager tests
+          path: packages/receipts
+          command: yarn test
+      - run:
+          name: contracts tests
+          path: packages/statechannels-contracts
+          command: yarn test
+
+  e2e-test:
+    docker:
+      - image: geoknee/statechannels:12.18-solc0.7.4 # Fast contract compilation with solc installed
+      - image: circleci/postgres:11.2-alpine-postgis
+    <<: *defaults
+
+    steps:
+      - checkout
+      - attach_workspace:
+          at: ~/project
+      - install_postgresql_client
+      - create_db:
+          db: payer
+      - create_db:
+          db: receipt
+      - run:
+          name: 'E2E tests (no ledger, no chain)'
+          path: 'packages/e2e-testing'
+          command: 'yarn test:e2e'
+      - run:
+          name: 'E2E tests (with ledger, with chain)'
+          path: 'packages/e2e-testing'
+          command: 'USE_LEDGER=true yarn test:e2e:chain'
+      - store_artifacts:
+          path: /tmp/e2e-test-with-ledger-with-chain.log
+      - store_artifacts:
+          path: /tmp/e2e-test-without-ledger-without-chain.log
+
+  stress-test:
+    docker:
+      - image: geoknee/statechannels:12.18-solc0.7.4 # Fast contract compilation with solc installed
+      - image: circleci/postgres:11.2-alpine-postgis
+    <<: *defaults
+    steps:
+      - checkout
+      - attach_workspace:
+          at: ~/project
+      - install_postgresql_client
+      - create_db:
+          db: payer
+      - create_db:
+          db: receipt
+      - run:
+          name: 'Stress test'
+          path: 'packages/e2e-testing'
+          command: 'yarn test:stress'
+      - store_artifacts:
+          path: /tmp/stress-test.log
+
+  stress-test-threaded:
+    resource_class: xlarge
+    docker:
+      - image: geoknee/statechannels:12.18-solc0.7.4 # Fast contract compilation with solc installed
+      - image: circleci/postgres:11.2-alpine-postgis
+    <<: *defaults
+    steps:
+      - checkout
+      - attach_workspace:
+          at: ~/project
+      - install_postgresql_client
+      - create_db:
+          db: payer
+      - create_db:
+          db: receipt
+      - run:
+          name: 'Stress test'
+          path: 'packages/e2e-testing'
+          command: 'AMOUNT_OF_WORKER_THREADS=6 yarn test:stress'
+      - store_artifacts:
+          path: /tmp/stress-test.log
+
+  build:
+    docker:
+      - image: geoknee/statechannels:12.18-solc0.7.4 # Fast contract compilation with solc installed
+      - image: circleci/postgres:11.2-alpine-postgis
+    <<: *defaults
+    environment:
+      USE_NATIVE_SOLC: true
+    steps:
+      - run:
+          name: 'set npm auth token'
+          command: 'echo "//registry.npmjs.org/:_authToken=${NPM_TOKEN}" > ~/.npmrc'
+
+      - checkout
+      - <<: *restore_dep
+      - run: yarn --cache-folder ~.cache/yarn
+      - run: git diff --exit-code
+      - run: yarn lint:check
+      - <<: *save_dep
+      - run: yarn test:ci
+
+      - persist_to_workspace:
+          root: ~/project
+          paths:
+            - packages/*/dist
+            - packages/*/build
+            - packages/*/lib
+            - packages/*/node_modules
+            - packages/*/artifacts
+            - node_modules
+
+workflows:
+  graph-payments:
+    jobs:
+      - build
+      - test:
+          requires:
+            - build
+      - e2e-test:
+          requires:
+            - build
+      - stress-test:
+          requires:
+            - build
+      - stress-test-threaded:
+          requires:
+            - build
+      - profile:
+          requires:
+            - build
+      - profile-threaded:
+          requires:
+            - build

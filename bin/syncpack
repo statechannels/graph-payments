@@ -1,0 +1,4 @@
+npx syncpack fix-mismatches
+npx syncpack format
+npx syncpack set-semver-ranges
+yarn
