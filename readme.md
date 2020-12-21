@@ -1,4 +1,4 @@
-# StateChannels / TheGraph
+# StateChannels / The Graph
 
 In this repository, you will find three main components and some testing infrastructure:
 
