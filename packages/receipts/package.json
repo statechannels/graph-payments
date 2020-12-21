@@ -15,7 +15,7 @@
     "test:watch": "yarn test --watch"
   },
   "dependencies": {
-    "@graphprotocol/common-ts": "0.4.0",
+    "@graphprotocol/common-ts": "1.0.1",
     "@graphprotocol/statechannels-contracts": "0.0.1",
     "@statechannels/client-api-schema": "0.7.0",
     "@statechannels/server-wallet": "1.18.0",

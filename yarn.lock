@@ -990,12 +990,12 @@
     unique-filename "^1.1.1"
     which "^1.3.1"
 
-"@graphprotocol/common-ts@0.4.0":
-  version "0.4.0"
-  resolved "https://registry.npmjs.org/@graphprotocol/common-ts/-/common-ts-0.4.0.tgz#2a3d05af95f28de7c445383e41ad45126eb7290d"
-  integrity sha512-75AoUC1jBoLx3n/ejSAdBVG0DWMzOT06cH6sW5x7Z7XU6J8Vfy1e+9OguWNVpbt09o98sAS9LSuH3A3+49hcOQ==
+"@graphprotocol/common-ts@1.0.1":
+  version "1.0.1"
+  resolved "https://registry.npmjs.org/@graphprotocol/common-ts/-/common-ts-1.0.1.tgz#c004b12c3d504abd4a536a137697af8add4103e6"
+  integrity sha512-i+btpwN4HjKDuDUzHaPOcF036F6BTgKP79Mh0Qn6SSIz+eqATPypEgS+7Gb0/m03c8w5wJ1C4N0yetb+WPKCrA==
   dependencies:
-    "@graphprotocol/contracts" "0.8.0-testnet-phase2.2"
+    "@graphprotocol/contracts" "1.0.1"
     "@graphprotocol/pino-sentry-simple" "0.7.1"
     "@urql/core" "1.13.1"
     "@urql/exchange-execute" "1.0.1"
@@ -1018,10 +1018,10 @@
     prom-client "12.0.0"
     sequelize "6.3.5"
 
-"@graphprotocol/contracts@0.8.0-testnet-phase2.2":
-  version "0.8.0-testnet-phase2.2"
-  resolved "https://registry.npmjs.org/@graphprotocol/contracts/-/contracts-0.8.0-testnet-phase2.2.tgz#1d2f5346545032a33bbb37ed5b78791c2b972c8b"
-  integrity sha512-yomekHtRHb8gNssi7NcbV3i17nI+VfBAMpNmf4Ew95+uFqZ0eDtA32hFea2npvmOfLvISP18tcrAisfL6EHGKg==
+"@graphprotocol/contracts@1.0.1":
+  version "1.0.1"
+  resolved "https://registry.npmjs.org/@graphprotocol/contracts/-/contracts-1.0.1.tgz#1ec2b4a1448748fe7baaf9de582c5a8781e6c920"
+  integrity sha512-bh2KDqoczf7R2zY/4iGpr0zI8t+DZJ7WDsyTgMlG2wJtLtPZVtGzmXj8VUpAckAy/wSdd5ggTIbZ525S3DnsJw==
   dependencies:
     "@ethersproject/contracts" "^5.0.3"
     ethers "^5.0.9"
