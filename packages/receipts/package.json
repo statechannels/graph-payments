@@ -1,6 +1,6 @@
 {
   "name": "@graphprotocol/receipts",
-  "version": "0.0.1",
+  "version": "0.1.0",
   "description": "Graph Network State Channel Receipt Manager",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -16,7 +16,7 @@
   },
   "dependencies": {
     "@graphprotocol/common-ts": "1.0.1",
-    "@graphprotocol/statechannels-contracts": "0.0.1",
+    "@graphprotocol/statechannels-contracts": "^0.1.0",
     "@statechannels/client-api-schema": "0.4.9",
     "@statechannels/server-wallet": "1.13.1",
     "ethers": "^5.0.9",

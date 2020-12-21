@@ -1,13 +1,13 @@
 {
   "name": "e2e-testing",
-  "version": "0.0.1",
+  "version": "0.1.0",
   "author": "Alex Gap <alex.gap@consensys.net>",
   "devDependencies": {
     "@ethersproject/bignumber": "^5.0.6",
     "@graphprotocol/common-ts": "0.4.0",
-    "@graphprotocol/payments": "0.0.1",
-    "@graphprotocol/receipts": "0.0.1",
-    "@graphprotocol/statechannels-contracts": "0.0.1",
+    "@graphprotocol/payments": "^0.1.0",
+    "@graphprotocol/receipts": "^0.1.0",
+    "@graphprotocol/statechannels-contracts": "^0.1.0",
     "@statechannels/client-api-schema": "0.4.9",
     "@statechannels/devtools": "0.5.0",
     "@statechannels/server-wallet": "1.13.1",
