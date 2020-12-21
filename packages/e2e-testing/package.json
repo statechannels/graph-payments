@@ -63,6 +63,7 @@
     "build": "yarn tsc"
   },
   "dependencies": {
+    "@graphprotocol/common-ts": "1.0.1",
     "@types/autocannon": "^4.1.0",
     "autocannon": "^6.5.0",
     "throng": "^4.0.0"
