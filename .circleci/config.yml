@@ -152,7 +152,7 @@ jobs:
           path: 'packages/e2e-testing'
           command: 'yarn test:e2e'
       - store_artifacts:
-          path: /tmp/e2e-test-without-ledger-without-chain.log
+          path: /tmp/e2e-test-with-ledger-without-chain.log
       - store_artifacts:
           path: /tmp/e2e-test-without-ledger-without-chain.log
 
