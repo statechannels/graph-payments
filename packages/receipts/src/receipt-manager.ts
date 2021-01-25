@@ -8,7 +8,7 @@ import {
 } from '@graphprotocol/statechannels-contracts';
 import _ from 'lodash';
 import {constants, ethers} from 'ethers';
-import {IncomingServerWalletConfig as WalletConfig} from '@statechannels/server-wallet/lib/src/config';
+import {IncomingServerWalletConfig as WalletConfig} from '@statechannels/server-wallet';
 import {extractSnapshot, isLedgerChannel, summarisePayload} from './utils';
 
 interface ReceiptManagerInterface {
@@ -47,17 +47,14 @@ export class ReceiptManager implements ReceiptManagerInterface {
       getAttestionAppByteCode()
     );
 
-    const {address} = new ethers.Wallet(this.privateKey);
-
     try {
+      const {address} = new ethers.Wallet(this.privateKey);
       await this.wallet.knex.table('signing_wallets').insert({
         private_key: this.privateKey,
         address
       });
     } catch (err) {
-      const walletAddress = await this.wallet.getSigningAddress();
-      if (address !== walletAddress) {
-        this.logger.error('Unable to insert signing wallet', {address, walletAddress});
+      if (err.constraint !== 'signing_wallets_private_key_unique') {
         throw err;
       }
     }
@@ -82,7 +79,10 @@ export class ReceiptManager implements ReceiptManagerInterface {
     const results = await this.wallet.pushMessage(payload);
     const pushMessageResults = results;
     const {channelResults} = pushMessageResults;
-    this.logger.debug('Payload pushed', channelResults.map(extractSnapshot));
+    this.logger.debug(
+      'Payload pushed',
+      channelResults.filter((r) => !isLedgerChannel(r)).map(extractSnapshot)
+    );
 
     const proposedChannels = channelResults.filter((cr: ChannelResult) => cr.status === 'proposed');
     const runningChannels = channelResults.filter(
@@ -97,7 +97,7 @@ export class ReceiptManager implements ReceiptManagerInterface {
       await this.handleClosedChannels(closedChannels)
     ]);
 
-    const {outbox} = this.wallet.mergeMessages([results, ...updatedResults]);
+    const {outbox} = this.wallet.mergeMessages(updatedResults);
     // TODO: We should filter out all messages except those for the specific recipient
     if (outbox.length == 1) {
       return outbox[0].params.data;
@@ -172,8 +172,9 @@ export class ReceiptManager implements ReceiptManagerInterface {
       // but we assume the gateway won't do that
       const results = await Promise.all(
         ourTurnChannels.map((c) => {
-          const declinedQuery = toQueryDeclined(c.appData, c.allocations);
-          return this.wallet.updateChannel({channelId: c.channelId, ...declinedQuery});
+          const {appData, allocation} = toQueryDeclined(c.appData, c.allocations[0]);
+          const allocations = [allocation];
+          return this.wallet.updateChannel({channelId: c.channelId, appData, allocations});
         })
       );
 
@@ -208,15 +209,15 @@ export class ReceiptManager implements ReceiptManagerInterface {
 
     this.logger.debug('Payment pushed', extractSnapshot(channelResult));
 
-    const {allocations, appData} = toAttestationProvided(
+    const {allocation, appData} = toAttestationProvided(
       prevAppData,
-      prevAllocations,
+      prevAllocations[0],
       attestation.responseCID,
       attestation.signature
     );
 
     this.logger.debug('Attestation signed', {
-      allocationid: allocations[0].allocationItems[1].destination,
+      allocationid: allocation.allocationItems[1].destination,
       ...attestation
     });
 
@@ -225,7 +226,7 @@ export class ReceiptManager implements ReceiptManagerInterface {
     } = await this.wallet.updateChannel({
       channelId: channelResult.channelId,
       appData,
-      allocations
+      allocations: [allocation]
     });
 
     this.logger.debug(
@@ -245,7 +246,7 @@ export class ReceiptManager implements ReceiptManagerInterface {
 
     this.logger.debug('Payment pushed', extractSnapshot(channelResult));
 
-    const {allocations, appData} = toQueryDeclined(prevAppData, prevAllocations);
+    const {allocation, appData} = toQueryDeclined(prevAppData, prevAllocations[0]);
 
     this.logger.debug('Query decline state created', {channel: channelResult.channelId});
 
@@ -254,7 +255,7 @@ export class ReceiptManager implements ReceiptManagerInterface {
     } = await this.wallet.updateChannel({
       channelId: channelResult.channelId,
       appData,
-      allocations
+      allocations: [allocation]
     });
 
     this.logger.debug(

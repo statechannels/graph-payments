@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import {createPaymentServer, createReceiptServer} from '../src/external-server';
 import {
   PAYER_SERVER_URL,
@@ -9,10 +10,9 @@ import {
 } from '../src/constants';
 import {clearExistingChannels, createTestLogger, generateAllocationIdAndKeys} from '../src/utils';
 import * as fs from 'fs';
-import {configureEnvVariables} from '@statechannels/devtools';
+import {configureEnvVariables, ETHERLIME_ACCOUNTS} from '@statechannels/devtools';
 
 import axios from 'axios';
-import {Logger} from 'pino';
 import _ from 'lodash';
 import {Wallet as ChannelWallet} from '@statechannels/server-wallet';
 jest.setTimeout(60_000);
@@ -30,48 +30,59 @@ export const LOG_FILE = `/tmp/e2e-test-${useLedger ? 'with-ledger' : 'without-le
 const logFileArg = `--logFile ${LOG_FILE}`;
 const ledgerArg = `--useLedger ${useLedger}`;
 const fundingArg = `--fundingStrategy ${process.env.FUNDING_STRATEGY || 'Fake'}`;
+const threadingArg = `--amountOfWorkerThreads ${process.env.AMOUNT_OF_WORKER_THREADS || 0}`;
 
 const numAllocationsArg = `--numAllocations ${NUM_ALLOCATIONS}`;
 
-const serverArgs = [ledgerArg, logFileArg, fundingArg, numAllocationsArg];
+const serverArgs = [ledgerArg, logFileArg, fundingArg, threadingArg, numAllocationsArg];
 
 const gatewayServer = createPaymentServer(serverArgs);
 const indexerServer = createReceiptServer(serverArgs);
-import {
-  defaultTestConfig,
-  overwriteConfigWithDatabaseConnection
-} from '@statechannels/server-wallet/lib/src/config';
+import {defaultTestConfig} from '@statechannels/server-wallet';
 import {ChannelResult} from '@statechannels/client-api-schema';
 import {BigNumber, providers} from 'ethers';
+import {ContractArtifacts} from '@statechannels/nitro-protocol';
+import {Contract} from 'ethers';
+import {NULL_APP_DATA} from '@statechannels/wallet-core';
+import {Logger} from '@graphprotocol/common-ts';
 let logger: Logger;
 
-const paymentWallet = ChannelWallet.create({
-  ...overwriteConfigWithDatabaseConnection(defaultTestConfig, {dbName: PAYER_SERVER_DB_NAME}),
-  networkConfiguration: {
-    ...defaultTestConfig.networkConfiguration,
-    chainNetworkID: process.env.CHAIN_ID
-      ? parseInt(process.env.CHAIN_ID)
-      : defaultTestConfig.networkConfiguration.chainNetworkID,
-    rpcEndpoint: process.env.RPC_ENDPOINT
-  }
-});
-const receiptwallet = ChannelWallet.create({
-  ...overwriteConfigWithDatabaseConnection(defaultTestConfig, {dbName: RECEIPT_SERVER_DB_NAME}),
-  networkConfiguration: {
-    ...defaultTestConfig.networkConfiguration,
-    chainNetworkID: process.env.CHAIN_ID
-      ? parseInt(process.env.CHAIN_ID)
-      : defaultTestConfig.networkConfiguration.chainNetworkID,
-    rpcEndpoint: process.env.RPC_ENDPOINT
-  }
-});
+const paymentWallet = ChannelWallet.create(
+  defaultTestConfig({
+    databaseConfiguration: {connection: {database: PAYER_SERVER_DB_NAME}},
+    networkConfiguration: {
+      chainNetworkID: process.env.CHAIN_ID
+        ? parseInt(process.env.CHAIN_ID)
+        : defaultTestConfig().networkConfiguration.chainNetworkID
+    },
+    chainServiceConfiguration: {
+      attachChainService: useChain,
+      provider: process.env.RPC_ENDPOINT,
+      pk: ETHERLIME_ACCOUNTS[0].privateKey
+    }
+  })
+);
+
+const receiptwallet = ChannelWallet.create(
+  defaultTestConfig({
+    databaseConfiguration: {connection: {database: RECEIPT_SERVER_DB_NAME}},
+    networkConfiguration: {
+      chainNetworkID: process.env.CHAIN_ID
+        ? parseInt(process.env.CHAIN_ID)
+        : defaultTestConfig().networkConfiguration.chainNetworkID
+    },
+    chainServiceConfiguration: {
+      attachChainService: useChain,
+      provider: process.env.RPC_ENDPOINT,
+      pk: ETHERLIME_ACCOUNTS[0].privateKey
+    }
+  })
+);
 
 const getChannels = async (database: 'receipt' | 'payment') => {
   const wallet = database === 'receipt' ? receiptwallet : paymentWallet;
   // Filter out the ledger channels results
-  return (await wallet.getChannels()).channelResults.filter(
-    (c) => !BigNumber.from(c.appData).isZero()
-  );
+  return (await wallet.getChannels()).channelResults.filter((c) => c.appData !== NULL_APP_DATA);
 };
 
 const expectChannelsHaveStatus = async (
@@ -101,24 +112,50 @@ const successfulPayment = (params?: {
 const syncChannels = () => axios.get(`${PAYER_SERVER_URL}/syncChannels`);
 
 describe('Payment & Receipt Managers E2E', () => {
-  let ganacheAutoMiner: NodeJS.Timeout;
+  let provider: providers.JsonRpcProvider;
+  let assetHolder: Contract;
 
-  beforeAll(async () => {
+  const mine6Blocks = () => _.range(6).forEach(() => provider?.send('evm_mine', []));
+
+  function setupLogging() {
     LOG_FILE && fs.existsSync(LOG_FILE) && fs.truncateSync(LOG_FILE);
     logger = createTestLogger(LOG_FILE);
-    logger.level = 'debug';
-    // Mine blocks every 1 second; required since state channel wallet requires 6 confirmations
-    // before taking action on funds deposited into a channel
-    const {rpcEndpoint} = paymentWallet.walletConfig.networkConfiguration;
-    if (rpcEndpoint) {
-      const provider = new providers.JsonRpcProvider(rpcEndpoint);
-      ganacheAutoMiner = setInterval(() => provider.send('evm_mine', []), 100);
+    (logger as any).level = 'debug';
+  }
+
+  function setupContractMonitor() {
+    if (process.env.RPC_ENDPOINT /* defined in chain-setup.ts */) {
+      provider = new providers.JsonRpcProvider(process.env.RPC_ENDPOINT);
+      assetHolder = new Contract(
+        process.env.ETH_ASSET_HOLDER_ADDRESS as string,
+        ContractArtifacts.EthAssetHolderArtifact.abi,
+        provider
+      );
+      assetHolder.on('Deposited', mine6Blocks);
+      assetHolder.on('AllocationUpdated', mine6Blocks);
     }
+  }
+
+  function teardownContractMonitor() {
+    if (process.env.RPC_ENDPOINT /* defined in chain-setup.ts */) {
+      assetHolder.off('Deposited', mine6Blocks);
+      assetHolder.off('AllocationUpdated', mine6Blocks);
+    }
+  }
+
+  beforeAll(() => {
+    setupLogging();
+    setupContractMonitor();
   });
 
   beforeEach(async () => {
-    await Promise.all([RECEIPT_SERVER_DB_NAME, PAYER_SERVER_DB_NAME].map(clearExistingChannels));
-    await Promise.all([gatewayServer.start(logger), indexerServer.start(logger)]);
+    try {
+      await Promise.all([RECEIPT_SERVER_DB_NAME, PAYER_SERVER_DB_NAME].map(clearExistingChannels));
+      await Promise.all([gatewayServer.start(logger), indexerServer.start(logger)]);
+    } catch (error) {
+      logger.error(error);
+      process.exit(1);
+    }
   });
 
   afterEach(async () => {
@@ -126,7 +163,7 @@ describe('Payment & Receipt Managers E2E', () => {
   });
 
   afterAll(async () => {
-    if (ganacheAutoMiner) clearInterval(ganacheAutoMiner);
+    teardownContractMonitor();
     await paymentWallet.destroy();
     await receiptwallet.destroy();
   });
@@ -160,7 +197,7 @@ describe('Payment & Receipt Managers E2E', () => {
   });
 
   test(`Can remove ${NUM_ALLOCATIONS} allocations using syncAllocations`, async () => {
-    await axios.get(`${PAYER_SERVER_URL}/syncAllocations`);
+    await axios.post(`${PAYER_SERVER_URL}/syncAllocations`);
 
     const receiptChannels = await getChannels('receipt');
     const paymentChannels = await getChannels('payment');

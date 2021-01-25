@@ -1,3 +1,4 @@
+import 'hardhat-watcher';
 export default {
   solidity: {
     version: '0.7.4',
@@ -20,5 +21,13 @@ export default {
     sources: 'contracts',
     deploy: 'hardhat-deploy',
     deployments: 'hardhat-deployments'
+  },
+  watcher: {
+    compilation: {
+      tasks: ['compile'],
+      files: ['./contracts'],
+      verbose: true,
+      force: true
+    }
   }
 };

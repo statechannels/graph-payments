@@ -27,7 +27,7 @@ import {createTestLogger} from './setup';
 import {
   defaultTestConfig,
   overwriteConfigWithDatabaseConnection
-} from '@statechannels/server-wallet/lib/src/config';
+} from '@statechannels/server-wallet';
 
 const LOG_FILE = '/tmp/receipt-manager-test.log';
 // const LOG_FILE = undefined // turn off logging
@@ -37,7 +37,7 @@ logger.level = 'debug';
 
 let receiptManager: ReceiptManager;
 let indexerAddress: string;
-const RECEIPT_MANAGER_CONNECTION = {dbName: 'receipt_manager'};
+const RECEIPT_MANAGER_CONNECTION = {database: 'receipt_manager_test'};
 function stateFromPayload(payload: WireMessage['data'] | undefined, index = 0): SignedState {
   expect(payload).toBeDefined();
   // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
@@ -49,7 +49,7 @@ beforeAll(async () => {
     logger,
     '0x95942b296854c97024ca3145abef8930bf329501b718c0f66d57dba596ff1318',
     mockContracts,
-    overwriteConfigWithDatabaseConnection(defaultTestConfig, RECEIPT_MANAGER_CONNECTION)
+    overwriteConfigWithDatabaseConnection(defaultTestConfig(), RECEIPT_MANAGER_CONNECTION)
   );
   await receiptManager.truncateDB();
   await receiptManager.migrateWalletDB();
@@ -73,7 +73,7 @@ describe('ReceiptManager', () => {
     );
 
     const state1 = stateFromPayload(outbound, 0);
-    expect(state1).toMatchObject({turnNum: 1});
+    expect(state1).toMatchObject({turnNum: 0});
 
     // Fake funding triggers it to also sign turnNum 3
     const state2 = stateFromPayload(outbound, 1);
@@ -86,7 +86,7 @@ describe('ReceiptManager', () => {
     );
 
     const state1 = stateFromPayload(outbound, 0);
-    expect(state1).toMatchObject({turnNum: 1});
+    expect(state1).toMatchObject({turnNum: 0});
 
     // Fake funding triggers it to also sign turnNum 3
     const state2 = stateFromPayload(outbound, 1);
@@ -94,9 +94,7 @@ describe('ReceiptManager', () => {
   });
 
   it('can validate a payment', async () => {
-    await receiptManager.inputStateChannelMessage(
-      mockCreatedZeroChannelMessage(indexerAddress).data
-    );
+    await receiptManager.inputStateChannelMessage(mockPostFundMessage(indexerAddress).data);
     await expect(
       receiptManager.inputStateChannelMessage(mockQueryRequestMessage(indexerAddress).data)
     ).resolves.not.toThrow();

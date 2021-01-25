@@ -1,20 +1,29 @@
-import {ChannelResult} from '@statechannels/client-api-schema';
+import {Allocation, ChannelResult} from '@statechannels/client-api-schema';
+
 import {ChannelSnapshot} from '../types';
+export type StalledChannelsOpts = {limit?: number; contextIds?: string[]};
 
 export interface CacheMaintainerAPI {
   // SET
-  insertChannels: (allocationId: string, channels: ChannelResult[]) => Promise<void>;
+  insertChannels: (allocationId: string, channels: ChannelResult[]) => Promise<string[]>;
   retireChannels: (allocationId: string) => Promise<{amount: string; channelIds: string[]}>;
   removeChannels: (channelIds: string[]) => Promise<void>;
-  insertLedgerChannel: (allocationId: string, channelId: string) => Promise<void>;
+  insertLedgerChannel: (
+    allocationId: string,
+    channelId: string,
+
+    initialOutcome: Allocation[]
+  ) => Promise<void>;
   removeLedgerChannels: (channelIds: string[]) => Promise<void>;
 
   // GET
   activeAllocations: (allocationIds?: string[]) => Promise<Record<string, number | undefined>>; // at least on active channel
+  readyingChannels: (allocationId: string) => Promise<string[]>; // turn_number == 0, not retired
   activeChannels: (allocationId: string) => Promise<string[]>; // not retired
   closableChannels: () => Promise<Record<string, string[]>>;
-  stalledChannels: (stallDuration: number, limit?: number) => Promise<string[]>;
-  getLedgerChannel: (allocationId: string) => Promise<string | undefined>;
+  stalledChannels: (stallDuration: number, opts: StalledChannelsOpts) => Promise<string[]>;
+  getLedgerChannels: (allocationId: string) => Promise<string[]>;
+  getInitialLedgerStateInfo: (channelId: string) => Promise<{outcome: Allocation[]}>;
 }
 
 export interface CacheUserAPI {
@@ -39,5 +48,9 @@ export interface CacheUserAPI {
   */
   submitReceipt: (channel: ChannelResult) => Promise<ChannelSnapshot>;
 }
-
-export type ChannelCache = CacheMaintainerAPI & CacheUserAPI;
+export type CacheUtilitiesAPI = {
+  destroy: () => Promise<void>;
+  clearCache: () => void;
+  initialize: () => Promise<void>;
+};
+export type ChannelCache = CacheMaintainerAPI & CacheUserAPI & CacheUtilitiesAPI;

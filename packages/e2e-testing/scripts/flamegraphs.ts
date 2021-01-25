@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import {
   createFlameGraphReceiptServer,
   createFlameGraphPaymentServer,
@@ -18,7 +19,7 @@ import autocannon from 'autocannon';
   const LOG_FILE = '/tmp/flamegraph.log';
   fs.existsSync(LOG_FILE) && fs.truncateSync(LOG_FILE);
   const logger = createTestLogger(LOG_FILE);
-  logger.level = 'debug';
+  (logger as any).level = 'debug';
   const logToFileOpts = [`--logFile ${LOG_FILE}`];
 
   await clearExistingChannels(RECEIPT_SERVER_DB_NAME);

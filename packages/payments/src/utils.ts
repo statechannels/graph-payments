@@ -1,6 +1,12 @@
-import {Allocation, ConditionalPayment, Address} from './query-engine-types';
+import {Allocation, ConditionalPayment, Address, toAddress} from './query-engine-types';
 import {fromJS, nullState, toJS, toQueryRequested} from '@graphprotocol/statechannels-contracts';
-import {makeDestination, Uint256, makeAddress, unreachable} from '@statechannels/wallet-core';
+import {
+  makeDestination,
+  Uint256,
+  makeAddress,
+  unreachable,
+  NULL_APP_DATA
+} from '@statechannels/wallet-core';
 import {BigNumber, constants, utils} from 'ethers';
 import {Payload as WirePayload} from '@statechannels/wire-format';
 import {
@@ -24,13 +30,14 @@ export function constructPaymentUpdate(
 ): {allocations: ChannelAllocation[]; appData: string} {
   const {outcome: prevOutcome, appData: prevAppData} = channel;
 
-  const {appData, allocations} = toQueryRequested(
+  const {appData, allocation} = toQueryRequested(
     prevAppData,
-    prevOutcome,
+    prevOutcome[0],
     payment.amount,
-    payment.requestCID
+    payment.requestCID,
+    payment.allocationId
   );
-  return {allocations, appData};
+  return {allocations: [allocation], appData};
 }
 export const constructStartState = (
   participant: Participant,
@@ -40,10 +47,15 @@ export const constructStartState = (
   attestationApp: Address,
   verifyingContract: Address,
   chainId: number,
-  amount: Uint256
+  amount: Uint256,
+  challengeDuration: number
 ): CreateChannelParams => {
   const {participantId, signingAddress} = participant;
   return {
+    /**
+     * The amount of time a challenge will wait on chain before finalizing
+     */
+    challengeDuration,
     /**
      * Where should the money go?
      */
@@ -69,8 +81,8 @@ export const constructStartState = (
       constants: {
         chainId,
         verifyingContract: verifyingContract.toString(),
-        allocationId: allocation.id,
-        subgraphDeploymentID: allocation.subgraphDeploymentID.bytes32
+        subgraphDeploymentID: allocation.subgraphDeploymentID.bytes32,
+        maxAllocationItems: 2
       }
     }),
 
@@ -159,8 +171,8 @@ export function summariseResponse(response: unknown): ResponseSummary {
 export function extractQueryResponse(result: ChannelResult): ChannelQueryResponse {
   const updatedAppData = toJS(result.appData);
 
-  const {subgraphDeploymentID, allocationId: indexerAddress} = updatedAppData.constants;
-  const {requestCID} = updatedAppData.variable;
+  const {subgraphDeploymentID} = updatedAppData.constants;
+  const {requestCID, allocationId: indexerAddress} = updatedAppData.variable;
   if (BigNumber.from(updatedAppData.variable.responseCID).eq(0))
     return {
       type: 'query-declined',
@@ -181,15 +193,15 @@ export function extractQueryResponse(result: ChannelResult): ChannelQueryRespons
   }
 }
 
-// todo(reorg): this should live in statechannels-contracts
+// TODO: This function should be removed. The allocation id is no longer an attestation channel constant
 export function extractAllocationId(channel: ChannelResult): Address {
-  return toJS(channel.appData).constants.allocationId;
+  return toAddress('0x' + channel.allocations[0].allocationItems[1].destination.slice(26));
 }
 
 export function isLedgerChannel(
   channel: Pick<ChannelResult, 'appData' | 'appDefinition'>
 ): boolean {
-  return channel.appDefinition === constants.AddressZero && channel.appData === '0x00';
+  return channel.appDefinition === constants.AddressZero && channel.appData === NULL_APP_DATA;
 }
 
 export const delay = async (ms = 10): Promise<void> =>

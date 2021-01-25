@@ -12,6 +12,8 @@ import {AppData, fromJS, toAddress} from '@graphprotocol/statechannels-contracts
 import {SignedState as WireState, Message as WireMessage} from '@statechannels/wire-format';
 import {NetworkContracts} from '@graphprotocol/common-ts';
 
+const ALLOCATION_ID = toAddress('0xB035Dc8Be2560359659Fe34C34DbBA3FC52Ba4Bb');
+
 export const mockSCAttestation = (): {responseCID: string; signature: string} => ({
   responseCID: constants.HashZero,
   signature: utils.joinSignature({r: constants.HashZero, s: constants.HashZero, v: 0})
@@ -21,12 +23,13 @@ const sampleAttestation = mockSCAttestation();
 export const mockAppData = (): AppData => ({
   constants: {
     chainId: 0,
-    allocationId: toAddress(constants.AddressZero),
     verifyingContract: constants.AddressZero,
-    subgraphDeploymentID: constants.HashZero
+    subgraphDeploymentID: constants.HashZero,
+    maxAllocationItems: 2
   },
   variable: {
     ...sampleAttestation,
+    allocationId: ALLOCATION_ID,
     requestCID: constants.HashZero,
     paymentAmount: BN.from(1),
     signature: '0x'
@@ -46,7 +49,7 @@ interface MockStateParams {
 
 export const mockContracts = {
   assetHolder: {address: constants.AddressZero},
-  attestationApp: {address: constants.AddressZero}
+  attestationApp: {address: '0x0000000000000000000000000000000000111121' /* nonzero */}
 } as NetworkContracts;
 
 const mockState = ({
@@ -57,7 +60,7 @@ const mockState = ({
 }: MockStateParams): InternalState => ({
   channelNonce: 0,
   chainId: '0',
-  appDefinition: makeAddress(constants.AddressZero),
+  appDefinition: makeAddress('0x0000000000000000000000000000000000111121' /* nonzero */),
   appData: fromJS(mockAppData()),
   participants: [
     {
@@ -84,7 +87,7 @@ const mockState = ({
       },
       {
         amount: BN.from(0),
-        destination: makeDestination(indexerAddress)
+        destination: makeDestination(ALLOCATION_ID)
       }
     ]
   }
@@ -124,7 +127,7 @@ export const mockPostFundMessage = (indexerAddress: string, gatewayBal = 100): W
   recipient: 'me',
   data: {
     walletVersion: 'mock',
-    signedStates: [signAsGateway(mockState({indexerAddress, gatewayBal, turnNum: 2}))]
+    signedStates: [signAsGateway(mockState({indexerAddress, gatewayBal, turnNum: 3}))]
   }
 });
 

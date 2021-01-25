@@ -1,5 +1,5 @@
 import {BN} from '@statechannels/wallet-core';
-import {ethers, utils} from 'ethers';
+import {BigNumber, ethers, utils} from 'ethers';
 
 const {AddressZero, HashZero} = ethers.constants;
 
@@ -10,12 +10,15 @@ export const toAddress = (s: Address | string): Address =>
 
 export interface ConstantAppData {
   chainId: number;
-  allocationId: Address;
   verifyingContract: string;
   subgraphDeploymentID: string;
+  // This is a uint256, but we know that it is less than 10_000
+  // TODO: I considered using uint16 in the contract to save a bit of space, but I didn't know how that would affect the pureJS encoder/decoder
+  maxAllocationItems: number;
 }
 
-interface VariableAppData {
+export interface VariableAppData {
+  allocationId: Address;
   paymentAmount: string;
   requestCID: string;
   responseCID: string;
@@ -31,11 +34,12 @@ const appDataSolidityEncoding = `
   tuple(
     tuple(
       uint256 chainId,
-      address allocationId,
       address verifyingContract,
-      bytes32 subgraphDeploymentID
+      bytes32 subgraphDeploymentID,
+      uint16 maxAllocationItems
     ) constants,
     tuple(
+      address allocationId,
       uint256 paymentAmount,
       bytes32 requestCID,
       bytes32 responseCID,
@@ -61,11 +65,12 @@ export function abiDecoder(appData: string): AppData {
   return {
     constants: {
       chainId: withExtraProps.constants.chainId.toNumber(),
-      allocationId: withExtraProps.constants.allocationId,
       verifyingContract: withExtraProps.constants.verifyingContract,
-      subgraphDeploymentID: withExtraProps.constants.subgraphDeploymentID
+      subgraphDeploymentID: withExtraProps.constants.subgraphDeploymentID,
+      maxAllocationItems: withExtraProps.constants.maxAllocationItems
     },
     variable: {
+      allocationId: withExtraProps.variable.allocationId,
       paymentAmount: withExtraProps.variable.paymentAmount.toHexString(),
       requestCID: withExtraProps.variable.requestCID,
       responseCID: withExtraProps.variable.responseCID,
@@ -76,27 +81,26 @@ export function abiDecoder(appData: string): AppData {
 
 export function pureJSDecoder(appData: string): AppData {
   let cursor = 66; // 0x + 64 byte metadata
-  const chainId = parseInt(appData.slice(cursor, cursor + 64), 16);
+  const chainId = parseInt(appData.slice(cursor, (cursor += 64)), 16);
+  const verifyingContract = '0x' + appData.slice((cursor += 24), (cursor += 40));
+  const subgraphDeploymentID = '0x' + appData.slice(cursor, (cursor += 64));
+  const maxAllocationItems = BigNumber.from(
+    '0x' + appData.slice(cursor, (cursor += 64))
+  ).toNumber();
+
   cursor += 64;
-  const allocationId = toAddress('0x' + appData.slice(cursor + 24, cursor + 64));
+  const allocationId = toAddress('0x' + appData.slice((cursor += 24), (cursor += 40)));
+  const paymentAmount = BN.from('0x' + appData.slice(cursor, (cursor += 64)));
+  const requestCID = '0x' + appData.slice(cursor, (cursor += 64));
+  const responseCID = '0x' + appData.slice(cursor, (cursor += 64));
+
   cursor += 64;
-  const verifyingContract = '0x' + appData.slice(cursor + 24, cursor + 64);
-  cursor += 64;
-  const subgraphDeploymentID = '0x' + appData.slice(cursor, cursor + 64);
-  cursor += 64 + 64;
-  const paymentAmount = BN.from('0x' + appData.slice(cursor, cursor + 64));
-  cursor += 64;
-  const requestCID = '0x' + appData.slice(cursor, cursor + 64);
-  cursor += 64;
-  const responseCID = '0x' + appData.slice(cursor, cursor + 64);
-  cursor += 64 + 64;
-  const sigLengthBytes = parseInt(appData.slice(cursor, cursor + 64), 16);
-  cursor += 64;
+  const sigLengthBytes = parseInt(appData.slice(cursor, (cursor += 64)), 16);
   const signature = '0x' + appData.slice(cursor, cursor + sigLengthBytes * 2);
 
   return {
-    constants: {chainId, allocationId, verifyingContract, subgraphDeploymentID},
-    variable: {paymentAmount, requestCID, responseCID, signature}
+    constants: {chainId, maxAllocationItems, verifyingContract, subgraphDeploymentID},
+    variable: {allocationId, paymentAmount, requestCID, responseCID, signature}
   };
 }
 
@@ -110,14 +114,15 @@ export function pureJSEncoder(appData: AppData): string {
     '0x' +
     '20'.padStart(64, '0') +
     appData.constants.chainId.toString(16).padStart(64, '0') +
-    appData.constants.allocationId.substring(2).padStart(64, '0') + // remove '0x'
     appData.constants.verifyingContract.substring(2).padStart(64, '0') +
     appData.constants.subgraphDeploymentID.substring(2) +
+    BN.from(appData.constants.maxAllocationItems).substring(2).padStart(64, '0') +
     'a0'.padStart(64, '0') +
+    appData.variable.allocationId.substring(2).padStart(64, '0') + // remove '0x'
     BN.from(appData.variable.paymentAmount).substring(2).padStart(64, '0') +
     appData.variable.requestCID.substring(2).padStart(64, '0') +
     appData.variable.responseCID.substring(2).padStart(64, '0') +
-    '80'.padStart(64, '0') +
+    'a0'.padStart(64, '0') +
     sigBytes.toString(16).padStart(64, '0') +
     appData.variable.signature.substring(2).padEnd(paddedSigLength * 2, '0')
   );
@@ -130,11 +135,12 @@ function roundUpToNext32(len) {
 export const nullState: AppData = {
   constants: {
     chainId: 0,
-    allocationId: toAddress(AddressZero),
     verifyingContract: AddressZero,
-    subgraphDeploymentID: HashZero
+    subgraphDeploymentID: HashZero,
+    maxAllocationItems: 0
   },
   variable: {
+    allocationId: toAddress(AddressZero),
     paymentAmount: '0',
     requestCID: HashZero,
     responseCID: HashZero,

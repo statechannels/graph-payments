@@ -3,22 +3,23 @@
 pragma solidity ^0.7.4;
 pragma experimental ABIEncoderV2;
 
-import '@statechannels/nitro-protocol/contracts/interfaces/ForceMoveApp.sol';
+import '@statechannels/nitro-protocol/contracts/interfaces/IForceMoveApp.sol';
 import '@statechannels/nitro-protocol/contracts/Outcome.sol';
 import '@openzeppelin/contracts/cryptography/ECDSA.sol';
 import '@openzeppelin/contracts/math/SafeMath.sol';
 
-contract AttestationApp is ForceMoveApp {
+contract AttestationApp is IForceMoveApp {
     using SafeMath for uint256;
 
     struct ConstantAppData {
         uint256 chainId;
-        address allocationId;
         address verifyingContract;
         bytes32 subgraphDeploymentID;
+        uint16 maxAllocationItems;
     }
 
     struct VariableAppData {
+        address allocationId;
         uint256 paymentAmount;
         bytes32 requestCID;
         bytes32 responseCID;
@@ -30,8 +31,7 @@ contract AttestationApp is ForceMoveApp {
         VariableAppData variable;
     }
 
-    uint256 constant PARTICIPANT_GATEWAY = 0;
-    uint256 constant PARTICIPANT_INDEXER = 1;
+    uint8 constant GATEWAY_IDX = 0;
 
     function validTransition(
         VariablePart calldata a,
@@ -39,24 +39,53 @@ contract AttestationApp is ForceMoveApp {
         uint48 turnNumB,
         uint256 nParticipants
     ) external override pure returns (bool) {
-        // BEGIN COPY: Copied from SingleAssetPayments.sol
-        // https://github.com/statechannels/statechannels/blob/ee1a0aa/packages/nitro-protocol/contracts/examples/SingleAssetPayments.sol
-        Outcome.OutcomeItem[] memory outcomeA = abi.decode(a.outcome, (Outcome.OutcomeItem[]));
-        Outcome.OutcomeItem[] memory outcomeB = abi.decode(b.outcome, (Outcome.OutcomeItem[]));
+        Outcome.AssetOutcome memory assetOutcomeA;
+        Outcome.AssetOutcome memory assetOutcomeB;
+        (assetOutcomeA, assetOutcomeB) = requireAttestationOutcome(a.outcome, b.outcome);
+
+        AttestationAppData memory appDataA = abi.decode(a.appData, (AttestationAppData));
+        AttestationAppData memory appDataB = abi.decode(b.appData, (AttestationAppData));
+
+        // Validate the constants
+        require(
+            _bytesEqual(abi.encode(appDataA.constants), abi.encode(appDataB.constants)),
+            'Constants must not change'
+        );
+
+        require(nParticipants == 2, 'Must be a 2-party channels');
+
+        // Validate the variable parts
+        if (turnNumB % 2 == GATEWAY_IDX) {
+            requireConditionalPayment(appDataB, assetOutcomeA, assetOutcomeB);
+        } else {
+            // Indexer moved
+            if (appDataB.variable.responseCID != 0) {
+                requireAttestationProvided(appDataA, appDataB, assetOutcomeA, assetOutcomeB);
+            } else {
+                requireQueryDeclined(appDataB, assetOutcomeA, assetOutcomeB);
+            }
+        }
+        return true;
+    }
+
+    function requireAttestationOutcome(bytes memory outcomeABytes, bytes memory outcomeBBytes)
+        internal
+        pure
+        returns (
+            Outcome.AssetOutcome memory assetOutcomeA,
+            Outcome.AssetOutcome memory assetOutcomeB
+        )
+    {
+        Outcome.OutcomeItem[] memory outcomeA = abi.decode(outcomeABytes, (Outcome.OutcomeItem[]));
+        Outcome.OutcomeItem[] memory outcomeB = abi.decode(outcomeBBytes, (Outcome.OutcomeItem[]));
 
         // Throws if more than one asset
         require(outcomeA.length == 1, 'outcomeA: Only one asset allowed');
         require(outcomeB.length == 1, 'outcomeB: Only one asset allowed');
 
         // Throws unless the assetoutcome is an allocation
-        Outcome.AssetOutcome memory assetOutcomeA = abi.decode(
-            outcomeA[0].assetOutcomeBytes,
-            (Outcome.AssetOutcome)
-        );
-        Outcome.AssetOutcome memory assetOutcomeB = abi.decode(
-            outcomeB[0].assetOutcomeBytes,
-            (Outcome.AssetOutcome)
-        );
+        assetOutcomeA = abi.decode(outcomeA[0].assetOutcomeBytes, (Outcome.AssetOutcome));
+        assetOutcomeB = abi.decode(outcomeB[0].assetOutcomeBytes, (Outcome.AssetOutcome));
 
         require(
             assetOutcomeA.assetOutcomeType == uint8(Outcome.AssetOutcomeType.Allocation),
@@ -66,108 +95,129 @@ contract AttestationApp is ForceMoveApp {
             assetOutcomeB.assetOutcomeType == uint8(Outcome.AssetOutcomeType.Allocation),
             'outcomeB: AssetOutcomeType must be Allocation'
         );
+    }
 
-        // Throws unless that allocation has exactly n outcomes
-        Outcome.AllocationItem[] memory allocationA = abi.decode(
+    function requireConditionalPayment(
+        AttestationAppData memory appDataB,
+        Outcome.AssetOutcome memory assetOutcomeA,
+        Outcome.AssetOutcome memory assetOutcomeB
+    ) internal pure {
+        require(appDataB.variable.requestCID != 0, 'Gateway Query: RequestCID must be non-zero');
+        require(appDataB.variable.responseCID == 0, 'Gateway Query: ResponseCID must be zero');
+
+        require(isZero(appDataB.variable.signature), 'Gateway Query: Signature must be zero');
+        require(
+            appDataB.variable.paymentAmount > 0,
+            'Gateway Query: Payment amount must be non-zero'
+        );
+        require(
+            appDataB.variable.allocationId != address(0),
+            'Gateway Query: allocationId must be non-zero'
+        );
+        require(
+            _bytesEqual(
+                assetOutcomeA.allocationOrGuaranteeBytes,
+                assetOutcomeB.allocationOrGuaranteeBytes
+            ),
+            'Gateway Query: Outcome must not change'
+        );
+    }
+
+    function requireAttestationProvided(
+        AttestationAppData memory appDataA,
+        AttestationAppData memory appDataB,
+        Outcome.AssetOutcome memory assetOutcomeA,
+        Outcome.AssetOutcome memory assetOutcomeB
+    ) internal pure {
+        address allocationId = appDataA.variable.allocationId;
+        bytes32 paymentDestination = bytes32(uint256(allocationId));
+        uint256 paymentAmount = appDataA.variable.paymentAmount;
+
+        Outcome.AllocationItem[] memory previousAllocation = abi.decode(
             assetOutcomeA.allocationOrGuaranteeBytes,
             (Outcome.AllocationItem[])
         );
-        Outcome.AllocationItem[] memory allocationB = abi.decode(
+        Outcome.AllocationItem[] memory nextAllocation = abi.decode(
             assetOutcomeB.allocationOrGuaranteeBytes,
             (Outcome.AllocationItem[])
         );
+
+        uint256 maxAllocationItems = appDataA.constants.maxAllocationItems;
+        require(nextAllocation.length <= maxAllocationItems, 'Max outcome items exceeded');
+
+        // This probably isn't necessary, but it doesn't hurt.
         require(
-            allocationA.length == nParticipants,
-            'outcomeA: Allocation length must equal number of participants'
+            appDataB.variable.allocationId == allocationId,
+            'Indexer turn: allocationId must match'
         );
         require(
-            allocationB.length == nParticipants,
-            'outcomeB: Allocation length must equal number of participants'
+            recoverAttestationSigner(appDataB) == allocationId,
+            'Indexer Attestation: must be signed with the allocationId'
         );
-        // END COPY
-
-        require(nParticipants == 2, 'Must be a 2-party channels');
-
-        AttestationAppData memory providedStateA = abi.decode(a.appData, (AttestationAppData));
-        AttestationAppData memory providedStateB = abi.decode(b.appData, (AttestationAppData));
-
-        // Validate the constants
-        require(
-            _bytesEqual(abi.encode(providedStateA.constants),abi.encode(providedStateB.constants)),
-            'Constants must not change'
+        // Assert that the payment was made correctly.
+        // First, check that the gateway made a payment.
+        bytes32 gatewayDestination = previousAllocation[GATEWAY_IDX].destination;
+        uint256 gatewayAmount = previousAllocation[GATEWAY_IDX].amount.sub(paymentAmount);
+        expectAllocationItem(
+            nextAllocation[GATEWAY_IDX],
+            Outcome.AllocationItem(gatewayDestination, gatewayAmount),
+            'Indexer Attestation: Gateway destination cannot change',
+            'Indexer Attestation: Gateway funds must be decremented by payment amount'
         );
-
-        // Next validate the variable parts
-        if (turnNumB % 2 == PARTICIPANT_GATEWAY) {
-            require(
-                providedStateB.variable.requestCID != 0,
-                'Gateway Query: RequestCID must be non-zero'
-            );
-            require(
-                providedStateB.variable.responseCID == 0,
-                'Gateway Query: ResponseCID must be zero'
-            );
-
-            require(
-                isZero(providedStateB.variable.signature),
-                'Gateway Query: Signature must be zero'
-            );
-            require(
-                providedStateB.variable.paymentAmount > 0,
-                'Gateway Query: Payment amount must be non-zero'
-            );
-        } else {
-            // Indexer moved
-
-            // If there is a non-zero responseCID the attestation has been provided
-            if (providedStateB.variable.responseCID > 0) {
-                require(
-                    recoverAttestationSigner(providedStateB) ==
-                        providedStateB.constants.allocationId,
-                    'Indexer Attestation: must be signed with the allocationId'
+        // Next check that the indexer received a payment.
+        // We first look for an existing outcome item for the given allocation id
+        bool paymentDetected = false;
+        for (uint256 idx = 1; idx < previousAllocation.length; idx++) {
+            if (nextAllocation[idx].destination == paymentDestination) {
+                // Ensure that the client correctly found an existing
+                require(!paymentDetected, 'Indexer Attestation: duplicate destinations');
+                paymentDetected = true;
+                uint256 expectedAmount = previousAllocation[idx].amount.add(paymentAmount);
+                expectAllocationItem(
+                    nextAllocation[idx],
+                    Outcome.AllocationItem(paymentDestination, expectedAmount),
+                    'Indexer Attestation: unreachable', // We know that the destination much match within this block
+                    'Indexer Attestation: Existing allocationId funds must be incremented by payment amount'
                 );
-
-                require(
-                    allocationB[PARTICIPANT_GATEWAY].amount ==
-                        allocationA[PARTICIPANT_GATEWAY].amount.sub(
-                            providedStateA.variable.paymentAmount
-                        ),
-                    'Indexer Attestation: Gateway funds must be decremented by payment amount'
-                );
-
-                require(
-                    allocationB[PARTICIPANT_INDEXER].amount ==
-                        allocationA[PARTICIPANT_INDEXER].amount.add(
-                            providedStateA.variable.paymentAmount
-                        ),
-                    'Indexer Attestation: Indexer funds must be incremented by payment amount'
-                );
-
-                // If there is a zero responseCID the query has been rejected
             } else {
-                require(
-                    providedStateB.variable.requestCID == 0,
-                    'Indexer Reject: RequestCID must be zero'
-                );
-
-                require(
-                    isZero(providedStateB.variable.signature),
-                    'Indexer Rject: Signature must be zero'
-                );
-
-                require(
-                    allocationB[PARTICIPANT_INDEXER].amount ==
-                        allocationA[PARTICIPANT_INDEXER].amount,
-                    'Indexer Reject: Indexer funds must not change'
-                );
-                require(
-                    allocationB[PARTICIPANT_GATEWAY].amount ==
-                        allocationA[PARTICIPANT_GATEWAY].amount,
-                    'Indexer Reject: Gateway funds must not change'
+                expectAllocationItem(
+                    nextAllocation[idx],
+                    previousAllocation[idx],
+                    'Indexer Attestation: Unrelated allocations cannot change destinations',
+                    'Indexer Attestation: Unrelated allocations cannot receive payments'
                 );
             }
         }
-        return true;
+        if (!paymentDetected) {
+            // This is the first time this allocation serviced a query in this channel.
+            require(
+                nextAllocation.length == previousAllocation.length + 1,
+                'Indexer Attestation: new outcome items must be appended to the end'
+            );
+            expectAllocationItem(
+                nextAllocation[nextAllocation.length - 1],
+                Outcome.AllocationItem(paymentDestination, paymentAmount),
+                'Indexer Attestation: New outcome items must have destination == paymentDestination',
+                'Indexer Attestation: New outcome items must have amount == paymentAmount'
+            );
+        }
+    }
+
+    function requireQueryDeclined(
+        AttestationAppData memory appDataB,
+        Outcome.AssetOutcome memory assetOutcomeA,
+        Outcome.AssetOutcome memory assetOutcomeB
+    ) internal pure {
+        // If there is a zero responseCID the query has been rejected
+        require(appDataB.variable.requestCID == 0, 'Indexer Reject: RequestCID must be zero');
+        require(isZero(appDataB.variable.signature), 'Indexer Reject: Signature must be zero');
+        require(
+            _bytesEqual(
+                assetOutcomeA.allocationOrGuaranteeBytes,
+                assetOutcomeB.allocationOrGuaranteeBytes
+            ),
+            'Indexer Reject: Outcome must not change'
+        );
     }
 
     function isZero(bytes memory data) private pure returns (bool) {
@@ -179,7 +229,17 @@ contract AttestationApp is ForceMoveApp {
         return true;
     }
 
-     /**
+    function expectAllocationItem(
+        Outcome.AllocationItem memory itemGiven,
+        Outcome.AllocationItem memory itemExpected,
+        string memory destinationRevertReason,
+        string memory amountRevertReason
+    ) internal pure {
+        require(itemGiven.destination == itemExpected.destination, destinationRevertReason);
+        require(itemGiven.amount == itemExpected.amount, amountRevertReason);
+    }
+
+    /**
      * @notice Check for equality of two byte strings
      * @dev Check for equality of two byte strings
      * @param _preBytes One bytes string

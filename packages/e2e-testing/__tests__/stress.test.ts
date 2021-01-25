@@ -4,23 +4,30 @@ import {clearExistingChannels, createTestLogger, generateAllocationIdAndKeys} fr
 import * as fs from 'fs';
 import autocannon from 'autocannon';
 
-import {Logger} from 'pino';
+import {configureEnvVariables} from '@statechannels/devtools';
+import {Logger} from '@graphprotocol/common-ts';
 
 jest.setTimeout(180_000);
+configureEnvVariables();
 const STRESS_TEST_DURATION = '1m';
 const STRESS_TEST_WARM_UP_DURATION = '10s';
 const STRESS_TEST_CONNECTIONS = 50;
 const LOG_FILE = '/tmp/stress-test.log';
-const logToFileOpts = [`--logFile ${LOG_FILE}`];
-const paymentServer = createPaymentServer(logToFileOpts.concat(['-c 100']));
-const receiptServer = createReceiptServer(logToFileOpts);
+const logFileArg = `--logFile ${LOG_FILE}`;
+
+const fundingArg = `--fundingStrategy ${process.env.FUNDING_STRATEGY || 'Fake'}`;
+const threadingArg = `--amountOfWorkerThreads ${process.env.AMOUNT_OF_WORKER_THREADS || 6}`;
+const serverArgs = [logFileArg, fundingArg, threadingArg];
+const paymentServer = createPaymentServer(serverArgs.concat(['-c 100', '--numAllocations 1']));
+const receiptServer = createReceiptServer(serverArgs);
 let logger: Logger;
 
 describe('stress test', () => {
   beforeAll(async () => {
     LOG_FILE && fs.existsSync(LOG_FILE) && fs.truncateSync(LOG_FILE);
     logger = createTestLogger(LOG_FILE);
-    logger.level = 'debug';
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (logger as any).level = 'debug';
 
     await Promise.all([RECEIPT_SERVER_DB_NAME, PAYER_SERVER_DB_NAME].map(clearExistingChannels));
     await Promise.all([paymentServer.start(logger), receiptServer.start(logger)]);

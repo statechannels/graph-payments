@@ -2,32 +2,42 @@ import {Argv, scriptName} from 'yargs';
 
 import {ethers} from 'ethers';
 import _ from 'lodash';
-import {ChannelManagement, PaymentManagement} from '../channel-cache/postgres-cache';
+
 import {ChannelResult} from '@statechannels/client-api-schema';
 import {ChannelSnapshot} from '../types';
-import {knex} from '../knexfile';
 import {TABLE} from '../db/constants';
 import {delay} from '../utils';
+import {createPostgresCache} from '../channel-cache/postgres-cache';
+import {CACHE_TEST_DB_CONNECTION_STRING} from './setup';
+import {createKnex} from '../db/utils';
 
+const knex = createKnex(CACHE_TEST_DB_CONNECTION_STRING);
+const cache = createPostgresCache(CACHE_TEST_DB_CONNECTION_STRING);
 const channelCache = knex.table(TABLE);
+
 async function acquireAndHold(contextId: string, id: number): Promise<void> {
   // Add a random delay so that two successive calls have a non-deterministic outcome.
   // Useful for testing concurrent calls to acquirePaymentChannel
   await delay(_.random(0, 10));
 
   console.log(`${id}: acquiring`);
-  await PaymentManagement.acquireChannel(contextId, async (snapshot) => {
-    console.log(`${id}: acquired`);
+  await createPostgresCache(CACHE_TEST_DB_CONNECTION_STRING).acquireChannel(
+    contextId,
+    async (snapshot) => {
+      console.log(`${id}: acquired`);
 
-    await delay();
+      await delay();
 
-    console.log(`${id}: releasing`);
+      console.log(`${id}: releasing`);
 
-    return {snapshot, result: undefined};
-  });
+      return {snapshot, result: undefined};
+    }
+  );
 }
 
 const channelResult = (input?: Partial<ChannelResult>): ChannelResult => ({
+  challengeExpirationTime: input?.challengeExpirationTime ?? 600_000,
+  fundingStatus: input?.fundingStatus ?? 'Funded',
   turnNum: input?.turnNum ?? 3,
   channelId: input?.channelId ?? ethers.Wallet.createRandom().address,
   status: 'running',
@@ -60,9 +70,9 @@ const acquireAndDisconnect = {
     const context = 'uniqueContext';
     await channelCache.delete().where({context_id: context});
 
-    await ChannelManagement.insertChannels(context, [channelResult()]);
+    await cache.insertChannels(context, [channelResult()]);
 
-    await PaymentManagement.acquireChannel(context, async ({channelId}) => {
+    await cache.acquireChannel(context, async ({channelId}) => {
       console.log(
         `acquired ${channelId} from process ${process.pid}. Waiting ${timeout} seconds before exiting`
       );
@@ -84,7 +94,7 @@ const testSaturatedContext = {
     const context = 'uniqueContext';
     await channelCache.delete().where({context_id: context});
 
-    await ChannelManagement.insertChannels(context, [channelResult({turnNum: 5})]);
+    await cache.insertChannels(context, [channelResult({turnNum: 5})]);
 
     let id = 0;
     const channelId = await acquireAndHold(context, (id += 1));
@@ -106,7 +116,7 @@ const testConcurrentRequests = {
     const context = 'uniqueContext';
     await channelCache.delete().where({context_id: context});
 
-    await ChannelManagement.insertChannels(context, [channelResult({turnNum: 5})]);
+    await cache.insertChannels(context, [channelResult({turnNum: 5})]);
 
     const p1 = acquireAndHold(context, 1).catch(() => console.log(`request 1 failed`));
     const p2 = acquireAndHold(context, 2).catch(() => console.log(`request 2 failed`));
@@ -121,7 +131,7 @@ const lockedChannels = {
   command: 'getLocked',
   describe: 'show the locked channel ids',
   handler: async () => {
-    const lockedChannels = await ChannelManagement.stalledChannels();
+    const lockedChannels = await cache.stalledChannels(2500);
 
     console.log(`locked channels: ${lockedChannels}`);
 
@@ -190,7 +200,7 @@ const benchmark = {
     console.time(`acquire channel x ${numChannels}`);
     await Promise.all(
       _.range(numChannels).map(async () => {
-        await PaymentManagement.acquireChannel('context-1', doNothing);
+        await cache.acquireChannel('context-1', doNothing);
       })
     );
     console.timeEnd(`acquire channel x ${numChannels}`);
@@ -208,7 +218,7 @@ const commands = {
   acquireAndDisconnect
 };
 
-scriptName('payer-cache-test')
+scriptName('payer')
   // .command(commands.seed)
   // .command(commands.benchmark)
   .command(commands.lockedChannels)

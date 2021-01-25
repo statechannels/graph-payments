@@ -4,7 +4,7 @@ import {utils} from 'ethers';
 
 import {deploy as deployNitro} from '@statechannels/server-wallet/lib/deployment/deploy';
 import {deploy as deployGraph} from '@graphprotocol/statechannels-contracts/deployment/deploy';
-import {defaultTestConfig} from '@statechannels/server-wallet/lib/src/config';
+
 import _ from 'lodash';
 
 export default async function setup(): Promise<void> {
@@ -20,7 +20,9 @@ export default async function setup(): Promise<void> {
     amount: ethPerAccount
   }));
   const defaultServerWalletAccount = {
-    privateKey: defaultTestConfig.ethereumPrivateKey,
+    privateKey: process.env.ETHEREUM_PRIVATE_KEY // useful if using rinkeby account for example
+      ? process.env.ETHEREUM_PRIVATE_KEY
+      : ETHERLIME_ACCOUNTS[0].privateKey,
     amount: ethPerAccount
   };
   const accounts = _.unionBy(etherlimeAccounts, [defaultServerWalletAccount], 'privateKey');

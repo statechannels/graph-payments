@@ -1,82 +1,84 @@
-import {AppData, fromJS, toJS} from './app-data';
+import {Address, AppData, fromJS, nullState, toJS, VariableAppData} from './app-data';
 import {Allocation} from '@statechannels/client-api-schema';
-import {BN} from '@statechannels/wallet-core';
-import _ from 'lodash';
-import {BigNumber, constants} from 'ethers';
+import {BN, makeDestination} from '@statechannels/wallet-core';
+import {BigNumber, constants as ethersConstants} from 'ethers';
 
-type ReturnType = {appData: string; allocations: Allocation[]};
+type ReturnType = {appData: string; allocation: Allocation};
 // TODO: These should probably be tested
 export function toQueryRequested(
   appDataStr: string,
-  allocations: Allocation[],
+  allocation: Allocation,
   amount: BigNumber,
-  requestCID: string
+  requestCID: string,
+  allocationId: Address
 ): ReturnType {
-  const appData = toJS(appDataStr);
+  const {constants} = toJS(appDataStr);
+
+  const availableAmount = allocation.allocationItems[0].amount;
+
+  if (BN.gt(amount, availableAmount))
+    throw new Error(
+      'AttestationApp: Cannot construct toQueryRequested, payment amount exceeds available budget'
+    );
 
   const newAppData: AppData = {
-    ...appData,
+    constants,
     variable: {
-      ...appData.variable,
-
+      allocationId,
       paymentAmount: amount.toHexString(),
       requestCID: requestCID,
-      responseCID: constants.HashZero,
+      responseCID: ethersConstants.HashZero,
       signature: '0x'
     }
   };
 
-  return {allocations, appData: fromJS(newAppData)};
+  return {allocation, appData: fromJS(newAppData)};
 }
 
 export function toAttestationProvided(
   appDataStr: string,
-  allocations: Allocation[],
+  allocation: Allocation,
   responseCID: string,
   signature: string
 ): ReturnType {
-  const appData = toJS(appDataStr);
+  const {
+    constants,
+    variable: {requestCID, allocationId, paymentAmount}
+  } = toJS(appDataStr);
 
-  const newAppData: AppData = {
-    ...appData,
-    variable: {
-      ...appData.variable,
-      responseCID,
-      signature
-    }
+  const variable: VariableAppData = {
+    responseCID,
+    signature,
+    paymentAmount: BN.from(0),
+    allocationId,
+    requestCID
   };
 
   // Assume a single allocation for now
-  const {paymentAmount} = appData.variable;
-  const firstAllocation = allocations[0];
-  const newAllocations: Allocation[] = [
-    {
-      ...firstAllocation,
-      allocationItems: [
-        {
-          ...firstAllocation.allocationItems[0],
-          amount: BN.sub(firstAllocation.allocationItems[0].amount, paymentAmount)
-        },
-        {
-          ...firstAllocation.allocationItems[1],
-          amount: BN.add(firstAllocation.allocationItems[1].amount, paymentAmount)
-        }
-      ]
-    }
-  ];
+  const {
+    assetHolderAddress,
+    allocationItems: [gatewayItem, ...indexerItems]
+  } = allocation;
 
-  return {appData: fromJS(newAppData), allocations: newAllocations};
+  const destination = makeDestination(allocationId);
+  const paymentIdx = indexerItems.findIndex((item) => item.destination === destination);
+
+  if (paymentIdx === -1) indexerItems.push({destination, amount: BN.from(paymentAmount)});
+  else indexerItems[paymentIdx].amount = BN.add(indexerItems[paymentIdx].amount, paymentAmount);
+
+  const newAllocation: Allocation = {
+    assetHolderAddress,
+    allocationItems: [
+      {destination: gatewayItem.destination, amount: BN.sub(gatewayItem.amount, paymentAmount)},
+      ...indexerItems
+    ]
+  };
+  return {appData: fromJS({constants, variable}), allocation: newAllocation};
 }
 
-export function toQueryDeclined(appDataStr: string, allocations: Allocation[]): ReturnType {
-  const appData = toJS(appDataStr);
+export function toQueryDeclined(appDataStr: string, allocation: Allocation): ReturnType {
+  const {constants} = toJS(appDataStr);
+  const {variable} = nullState;
 
-  const newAppData: AppData = _.merge(appData, {
-    variable: {
-      requestCID: constants.HashZero,
-      responseCID: constants.HashZero,
-      signature: '0x'
-    }
-  });
-  return {appData: fromJS(newAppData), allocations};
+  return {appData: fromJS({constants, variable}), allocation};
 }

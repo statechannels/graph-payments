@@ -5,7 +5,8 @@ export class TestChannelManager extends ChannelManager {
     return (await this.cache.activeChannels(allocationId)).length;
   }
   async ledgerChannelExists(allocationId: string): Promise<boolean> {
-    return !!(await this.cache.getLedgerChannel(allocationId));
+    const ret = await this.cache.getLedgerChannels(allocationId);
+    return ret.length > 0;
   }
   static async create(opts: ChannelManagerOptions): Promise<TestChannelManager> {
     const channelManager = new TestChannelManager(opts);

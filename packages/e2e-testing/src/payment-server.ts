@@ -1,12 +1,13 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import express from 'express';
+import joi from 'joi';
 import throng from 'throng';
 import {Argv, scriptName} from 'yargs';
 
-import {NetworkContracts, createMetrics} from '@graphprotocol/common-ts';
+import {NetworkContracts, createMetrics, Logger} from '@graphprotocol/common-ts';
 import {
-  PostgresCache,
+  createPostgresCache,
   PaymentManager,
-  MemoryCache,
   PaymentManagementAPI,
   ChannelManager,
   ChannelManagementAPI
@@ -19,43 +20,80 @@ import bodyParser from 'body-parser';
 import {
   RECEIPT_SERVER_URL,
   PAYER_SERVER_PORT,
-  TEST_PAYMENT,
   PAYER_SERVER_URL,
-  PAYER_PRIVATE_KEY
+  PAYER_PRIVATE_KEY,
+  REQUEST_CID,
+  TEST_SUBGRAPH_ID,
+  TEST_ATTESTATION_APP_ADDRESS
 } from './constants';
 import waitOn from 'wait-on';
-import cluster from 'cluster';
 import {createTestLogger, generateAllocations} from './utils';
-import {Logger} from 'pino';
-import {constants, Wallet} from 'ethers';
+import {BigNumber, constants, Wallet} from 'ethers';
 import {BN} from '@statechannels/wallet-core';
 import {
   defaultTestConfig,
-  overwriteConfigWithDatabaseConnection,
-  overwriteConfigWithEnvVars
-} from '@statechannels/server-wallet/lib/src/config';
+  overwriteConfigWithDatabaseConnection
+} from '@statechannels/server-wallet';
+import {Address} from '@graphprotocol/statechannels-contracts';
+import {ETHERLIME_ACCOUNTS} from '@statechannels/devtools';
 
-const messageSender = async (indexerUrl: string, payload: unknown, logger: Logger) => {
-  const {data} = await axios.post(`${RECEIPT_SERVER_URL}/messages`, payload);
-  logger.trace('Received data from message endpoint', data);
-  return data;
+type MessageSenderConfig = {
+  dropOutgoingRate: number;
+  dropIncomingRate: number;
+  meanDelay: number;
+  logger: Logger;
+};
+
+const constructMessageSender = (config: MessageSenderConfig) => {
+  const {logger, dropIncomingRate, dropOutgoingRate, meanDelay} = config;
+
+  return async (_indexerUrl: string, payload: unknown) => {
+    if (Math.random() <= dropOutgoingRate) {
+      logger.warn('Dropping outgoing message', {payload});
+      return;
+    }
+
+    const {data} = await axios.post(`${RECEIPT_SERVER_URL}/messages`, payload);
+    logger.trace('Received data from message endpoint', data);
+
+    if (Math.random() <= dropIncomingRate) {
+      logger.warn('Dropping incoming message', {data});
+      return;
+    }
+
+    if (meanDelay) {
+      // Serves two purposes:
+      // 1. randomly re-order messages
+      // 2. introduce latency to better represent real-world usage, where the payer & receiver
+      //    are not co-located
+      await new Promise((r) => setTimeout(r, meanDelay / 2 + Math.random() * meanDelay));
+    }
+    return data;
+  };
 };
 
 const mockContracts = {
   assetHolder: {address: process.env.ETH_ASSET_HOLDER_ADDRESS || constants.AddressZero}, // TODO: Replace with GRTAssetHolder contract
-  attestationApp: {address: process.env.ATTESTATION_APP || constants.AddressZero},
+  attestationApp: {
+    address: process.env.ATTESTATION_APP || TEST_ATTESTATION_APP_ADDRESS
+  },
   staking: {collect: _.noop},
   disputeManager: {address: constants.AddressZero}
 } as NetworkContracts;
 
 const createPayment = async (
-  allocationId: string,
+  allocationId: Address,
   paymentManager: PaymentManagementAPI,
   logger: Logger
 ): Promise<unknown> => {
   let payment;
   try {
-    payment = await paymentManager.createPayment(allocationId, TEST_PAYMENT);
+    payment = await paymentManager.createPayment({
+      allocationId,
+      amount: BigNumber.from(1),
+      requestCID: REQUEST_CID,
+      subgraphDeploymentID: TEST_SUBGRAPH_ID
+    });
   } catch (err) {
     logger.debug(`No channels found. Payment failed.`, {
       allocationId,
@@ -75,20 +113,22 @@ const builder = (yargs: Argv): Argv =>
     .option('fundsPerAllocation', {type: 'number', default: BN.from(10 ** 12)})
     .option('paymentChannelFundingAmount', {type: 'string', default: BN.from(10 ** 10)})
     .option('channelsPerAllocation', {type: 'number', default: 2})
+    .option('numAllocations', {type: 'number', default: 0})
     .alias('c', 'channelsPerAllocation')
     .option('pgUsername', {type: 'string', default: 'postgres'})
     .alias('u', 'pgUsername')
     .option('pgDatabase', {type: 'string', default: 'payer'})
     .alias('d', 'pgDatabase')
-    .option('ensureAllocations', {type: 'boolean', default: true})
-    .alias('e', 'ensureAllocations')
     .option('useDatabase', {type: 'boolean', default: true})
     .option('useLedger', {type: 'boolean', default: false})
     .option('fundingStrategy', {type: 'string', default: 'Fake'})
     .alias('f', 'fundingStrategy')
+    .option('amountOfWorkerThreads', {type: 'number', default: 0})
+    .option('dropOutgoingRate', {type: 'number', default: 0})
+    .option('dropIncomingRate', {type: 'number', default: 0})
+    .option('meanDelay', {type: 'number', default: 0})
     .boolean('cluster');
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AnyArgs = {[key: string]: any} & Argv['argv'];
 
 const createTasks = (logger: Logger) => ({
@@ -101,38 +141,37 @@ const createTasks = (logger: Logger) => ({
     paymentChannelFundingAmount,
     channelsPerAllocation,
     fundsPerAllocation,
-    useDatabase,
     useLedger,
     fundingStrategy,
-    numAllocations = 1,
-    pgDatabase
-  }: AnyArgs) => {
+    numAllocations,
+    pgDatabase,
+    amountOfWorkerThreads,
+    messageSenderConfig
+  }: AnyArgs & {messageSenderConfig: MessageSenderConfig}) => {
+    const messageSender = constructMessageSender(messageSenderConfig);
+
     const channelManager = await ChannelManager.create({
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       logger: logger.child({module: 'PaymentManager'}) as any,
-      messageSender: (i, p) => messageSender(i, p, logger),
+      messageSender,
       fundsPerAllocation,
       paymentChannelFundingAmount,
       contracts: mockContracts,
       metrics,
-      cache: useDatabase ? PostgresCache : new MemoryCache(),
       fundingStrategy,
       destinationAddress: new Wallet(PAYER_PRIVATE_KEY).address,
       useLedger,
       syncOpeningChannelsPollIntervalMS: 2500,
+      ensureAllocationsConcurrency: 10,
 
-      walletConfig: {
-        ...overwriteConfigWithDatabaseConnection(
-          // TODO: Currently the env vars get set for the deployed contracts so we still load them
-          // This should be cleaned up when we remove all env vars
-          overwriteConfigWithEnvVars(defaultTestConfig),
-          {dbName: pgDatabase}
-        ),
-        networkConfiguration: {
-          ...defaultTestConfig.networkConfiguration,
-          rpcEndpoint: process.env.RPC_ENDPOINT
+      walletConfig: defaultTestConfig({
+        workerThreadAmount: Number(amountOfWorkerThreads),
+        databaseConfiguration: {connection: {database: pgDatabase}},
+        chainServiceConfiguration: {
+          attachChainService: !!process.env.RPC_ENDPOINT,
+          provider: process.env.RPC_ENDPOINT,
+          pk: ETHERLIME_ACCOUNTS[0].privateKey
         }
-      }
+      })
     });
     await channelManager.prepareDB();
 
@@ -144,6 +183,9 @@ const createTasks = (logger: Logger) => ({
     await channelManager.ensureAllocations(
       testAllocations.map((allocation) => ({allocation, num: channelsPerAllocation, type: 'SetTo'}))
     );
+    logger.info('Channels set up', {
+      allocationIds: testAllocations.map((x) => x.id)
+    });
 
     return channelManager;
   }
@@ -156,24 +198,34 @@ const commands = {
       'Start a payment manager, optionally call `ensureAllocations`, and start listening to the `/sendPayment` endpoint',
     builder,
     handler: async (args: AnyArgs): Promise<void> => {
-      const {ensureAllocations, logFile} = args;
+      const {logFile, dropIncomingRate, dropOutgoingRate, meanDelay} = args;
       const logger = createTestLogger(logFile).child({module: 'PaymentServer'});
-      logger.level = 'debug';
+      (logger as any).level = 'debug';
+
+      logger.info('starting payment server', {args});
       const tasks = createTasks(logger);
       await tasks.waitForReceiptServer();
-      let channelManager: ChannelManagementAPI;
 
-      if (ensureAllocations && cluster.isMaster) {
-        channelManager = await tasks.ensureAllocations(args);
-      }
+      const messageSenderConfig: MessageSenderConfig = {
+        meanDelay,
+        dropIncomingRate,
+        dropOutgoingRate,
+        logger
+      };
+      const channelManager = await tasks.ensureAllocations({...args, messageSenderConfig});
 
       const paymentManager = await PaymentManager.create({
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        logger: logger.child({module: 'PaymentManager'}) as any,
+        logger: logger.child({module: 'PaymentManager'}),
         metrics,
-        cache: PostgresCache,
-        walletConfig: overwriteConfigWithDatabaseConnection(defaultTestConfig, {
-          dbName: args.pgDatabase
+        cache: createPostgresCache({
+          database: args.pgDatabase,
+          user: args.pgUsername,
+          host: 'localhost'
+        }),
+        walletConfig: overwriteConfigWithDatabaseConnection(defaultTestConfig(), {
+          database: args.pgDatabase,
+          user: args.pgUsername,
+          host: 'localhost'
         })
       });
 
@@ -207,7 +259,7 @@ function startApp(
     .get('/', (_, res) => res.status(200).send('Ready to roll!'))
     .get('/sendPayment', async (req, res) => {
       const privateKey = req.query.privateKey as string;
-      const allocationId = req.query.allocationId as string;
+      const allocationId = req.query.allocationId as Address;
 
       const payment = await createPayment(allocationId, paymentManager, logger);
 
@@ -240,17 +292,51 @@ function startApp(
         await channelManager.syncChannels(0);
         res.status(200).send(true);
       } catch (err) {
-        logger.error({err}, 'syncChannels failed');
+        logger.error('syncChannels failed', {err});
         res.status(500).send(`syncChannels failed with ${err.message}`);
       }
+    });
+
+  const requests = joi.array().items(
+    joi.object({
+      allocation: joi
+        .object({
+          id: joi.string().required(),
+          indexer: joi
+            .object({
+              url: joi.string().required(),
+              id: joi.string().required()
+            })
+            .required(),
+          subgraphDeploymentID: joi
+            .object({
+              bytes32: joi.string().required()
+            })
+            .required()
+        })
+        .required(),
+      type: joi.string().required(),
+      num: joi.number().required()
     })
-    .get('/syncAllocations', async (_req, res) => {
+  );
+
+  const schema = joi.object({requests});
+
+  app
+    .post('/syncAllocations', async (req, res) => {
       try {
-        await channelManager.syncAllocations([]);
-        res.send();
+        const {error, value} = schema.validate(req.body);
+        if (error) {
+          logger.error('invalid data', {error});
+          res.status(500).send({message: 'syncAllocations failed', error});
+          return;
+        }
+
+        await channelManager.syncAllocations(value.requests ?? []);
+        res.send('Allocations synced');
       } catch (err) {
-        logger.error({err}, `syncAllocations failed ${err.message}`);
-        res.status(500).send(`syncAllocations failed with ${err.message}`);
+        logger.error(`syncAllocations failed ${err.message}`, {err});
+        res.status(500).send({err, message: 'syncAllocations failed'});
       }
     })
     .listen(PAYER_SERVER_PORT, () => {

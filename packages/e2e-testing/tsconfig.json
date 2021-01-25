@@ -7,5 +7,6 @@
     "esModuleInterop": true,
     "noImplicitAny": true
   },
+  "references": [{"path": "../payments"},{"path": "../receipts"}],
   "include": ["src", "e2e-test"]
 }

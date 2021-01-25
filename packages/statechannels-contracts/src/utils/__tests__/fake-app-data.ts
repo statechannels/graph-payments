@@ -7,11 +7,12 @@ import {AppData, nullState, toAddress} from '../app-data';
 export const startState: AppData = {
   constants: {
     chainId: 5,
-    allocationId: toAddress('0x1111111111111111111111111111111111111111'),
     verifyingContract: '0x2222222222222222222222222222222222222222',
-    subgraphDeploymentID: '0x3333333333333333333333333333333333333333333333333333333333333333'
+    subgraphDeploymentID: '0x3333333333333333333333333333333333333333333333333333333333333333',
+    maxAllocationItems: 100
   },
   variable: {
+    allocationId: toAddress('0x1111111111111111111111111111111111111111'),
     paymentAmount: BN.from(0),
     requestCID: HashZero,
     responseCID: HashZero,

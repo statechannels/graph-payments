@@ -1,7 +1,7 @@
 {
   "name": "@graphprotocol/payments",
   "version": "0.0.1",
-  "description": "Graph Network State Channel Payment Management",
+"description": "Graph Network State Channel Payment Management",
   "repository": "https://github.com/statechannels/graph-payments",
   "author": "State Channels",
   "private": false,
@@ -11,10 +11,11 @@
     "prepare": "yarn tsc -b",
     "lint:check": "eslint . --ext .ts --cache",
     "lint:write": "eslint . --ext .ts --fix",
-    "test": "SKIP_EVM_VALIDATION=true jest --passWithNoTests --verbose",
+    "test": "jest --passWithNoTests --verbose",
     "test:watch": "jest --watch --passWithNoTests --verbose",
-    "db:create_schema": "./scripts/create_schema.sh",
-    "db:migrate": "yarn db:create_schema && npx knex migrate:latest --cwd ./src/db"
+    "db:migrate": "npx ts-node ./scripts/db-utils.ts migrate",
+    "db:create_schema": "npx ts-node ./scripts/db-utils.ts create_schema",
+    "db:create_test_db": "createdb payment_manager_test && createdb cache_test"
   },
   "resolutions": {
     "scrypt": "https://registry.yarnpkg.com/@favware/skip-dependency/-/skip-dependency-1.0.2.tgz"
@@ -22,12 +23,12 @@
   "dependencies": {
     "@graphprotocol/common-ts": "1.0.1",
     "@graphprotocol/statechannels-contracts": "0.0.1",
-    "@statechannels/client-api-schema": "0.4.9",
-    "@statechannels/server-wallet": "1.13.1",
-    "@statechannels/wallet-core": "0.9.8",
+    "@statechannels/client-api-schema": "0.7.0",
+    "@statechannels/server-wallet": "1.18.0",
+    "@statechannels/wallet-core": "0.10.0",
     "@types/pino": "^6.3.0",
     "@types/retry": "^0.12.0",
-    "async-lock": "^1.2.4",
+    "async-lock": "^1.2.8",
     "bs58": "^4.0.1",
     "cors": "^2.8.5",
     "ethers": "5.0.9",
@@ -35,17 +36,17 @@
     "graphql-tag": "^2.10.3",
     "husky": "4.2.5",
     "jest": "26.1.0",
-    "knex": "0.20.9",
+    "knex": "0.21.12",
     "morgan": "^1.9.1",
     "p-map": "^4.0.0",
     "p-queue": "^6.6.1",
     "p-tap": "^3.1.0",
+    "pg-connection-string": "^2.4.0",
     "pg-promise": "^10.7.0",
     "retry": "^0.12.0",
     "yargs": "^15.1.0"
   },
   "devDependencies": {
-    "@statechannels/devtools": "0.5.0",
     "@types/async-lock": "^1.1.2",
     "@types/bs58": "^4.0.1",
     "@types/cors": "^2.8.6",
@@ -55,13 +56,14 @@
     "@types/lodash": "^4.14.159",
     "@types/morgan": "^1.7.37",
     "@types/node": "^13.11.0",
+    "@types/pg-connection-string": "^2.0.0",
     "@types/pg-promise": "^5.4.3",
     "@types/yargs": "^15.0.5",
     "@typescript-eslint/eslint-plugin": "^3.10.1",
     "@typescript-eslint/parser": "^3.10.1",
     "eslint": "^7.7.0",
     "eslint-plugin-prettier": "3.1.2",
-    "knex": "0.20.9",
-    "ts-node": "^8.10.2"
+    "ts-node": "^8.10.2",
+    "typescript": "4.1.2"
   }
 }

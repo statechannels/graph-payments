@@ -1,7 +1,7 @@
-import {toAddress} from '@graphprotocol/common-ts';
-import {Allocation} from '@graphprotocol/payments/dist/query-engine-types';
-import {signAttestation} from '@graphprotocol/statechannels-contracts';
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import {BigNumber, Wallet} from 'ethers';
+import {Logger, toAddress} from '@graphprotocol/common-ts';
+import {signAttestation} from '@graphprotocol/statechannels-contracts';
 import _ from 'lodash';
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import {Client} from 'pg';
@@ -14,6 +14,7 @@ import {
   TEST_SUBGRAPH_ID,
   VERIFYING_CONTRACT
 } from './constants';
+import {Allocation} from '@graphprotocol/payments';
 
 export async function clearExistingChannels(databaseName: string): Promise<void> {
   const client = new Client({
@@ -60,7 +61,7 @@ const hooks = {
   }
 };
 
-export const createTestLogger = (file?: string): pino.Logger => {
+export const createTestLogger = (file?: string): Logger => {
   return file ? pino({hooks}, pino.destination(file)) : (pino({hooks}) as any);
 };
 

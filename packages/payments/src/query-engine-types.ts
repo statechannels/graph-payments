@@ -3,13 +3,13 @@ import {SubgraphDeploymentID, Attestation} from '@graphprotocol/common-ts';
 
 export type Address = string & {_isAddress: void};
 
-export const toAddress = (s: Address | string): Address =>
-  typeof s === 'string' ? (utils.getAddress(s) as Address) : s;
+export const toAddress = (s: Address | string): Address => utils.getAddress(s) as Address;
 
 export interface ConditionalPayment {
   amount: BigNumber;
   requestCID: string;
   subgraphDeploymentID: SubgraphDeploymentID;
+  allocationId: Address;
 }
 
 export interface QueryExecutionResult {

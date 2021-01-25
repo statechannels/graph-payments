@@ -40,10 +40,10 @@ This particular app uses no `appData`.
 
 It is a `ForceMove` app with the following intended properties:
 
-1. On the gateway's turn, it embeds a query ID (`queryCID`) in the app data.
+1. On the gateway's turn, it embeds a query ID (`queryCID`) and an allocation id (`allocationId`) in the app data.
 2. On the indexer's turn, it embeds an attestation in the app data
-   a. It deducts the `paymentAmount` from the gateway's total in the outcome, and adds it to the indexer's total
-   b. It signs the attestation
+   1. It deducts the `paymentAmount` from the gateway's total in the outcome, and adds it to the indexer's total for that allocation. If the indexer hasn't been payed yet through that allocation, a new outcome item is created
+   2. It signs the attestation
 
 **Reminder**: Peers take turns in Nitro state channels. In these channels, the gateway takes even turns, and the indexer takes odd turns. For example, if the current turn number is 7, then it is the gateway's turn to update the channel on turn 8, because it is even.
 
@@ -73,3 +73,11 @@ A malicious indexer can skip (1), and put a random value for the `responseCID`.
 Thus, signing the attestation does not guarantee that the query result is correct.
 
 The gateway can, in this case, penalize the indexer's stake by _challenging_ the result. The penalty is very severe, providing an incentive for indexers to be honest.
+
+## Testing
+
+There is [one positive test case](https://github.com/statechannels/graph-payments/blob/7e545a839cd6cf98ec6a57126e5075e8a3cec9fe/packages/statechannels-contracts/test/attestationStateMachine.test.ts#L158-L161) for each possible (state, event) pair in the happy path.
+
+In addition, there are [some test cases](https://github.com/statechannels/graph-payments/blob/7e545a839cd6cf98ec6a57126e5075e8a3cec9fe/packages/statechannels-contracts/test/attestationStateMachine.test.ts#L218-L225) of invalid transitions.
+
+These are tested against contracts deployed to a local ganache network.

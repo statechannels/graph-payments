@@ -2,8 +2,7 @@ import {SubgraphDeploymentID} from '@graphprotocol/common-ts';
 import {BigNumber, constants, utils} from 'ethers';
 
 import * as base58 from 'bs58';
-import {defaultTestConfig} from '@statechannels/server-wallet/lib/src/config';
-
+import {defaultTestConfig} from '@statechannels/server-wallet';
 export const RECEIPT_SERVER_PORT = 5198;
 export const PAYER_SERVER_PORT = 5199;
 
@@ -32,14 +31,10 @@ export const REQUEST_CID = utils.hexZeroPad('0x1', 32);
 export const RESPONSE_CID = utils.hexZeroPad('0x2', 32);
 // We want to use the same chainId that we use in the payment manager/ receipt manager
 export const CHAIN_ID = BigNumber.from(
-  defaultTestConfig.networkConfiguration.chainNetworkID
+  defaultTestConfig().networkConfiguration.chainNetworkID
 ).toNumber();
 export const VERIFYING_CONTRACT = constants.AddressZero;
 
-export const TEST_PAYMENT = {
-  amount: BigNumber.from(1),
-  requestCID: REQUEST_CID,
-  subgraphDeploymentID: TEST_SUBGRAPH_ID
-};
-
 export const TEST_GRAPHQL_RESPONSE = 'OK';
+
+export const TEST_ATTESTATION_APP_ADDRESS = '0x0000000000000000000000000000000000111121';

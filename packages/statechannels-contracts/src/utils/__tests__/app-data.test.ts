@@ -5,7 +5,7 @@ function testEncodeDecode(toJS, fromJS) {
   it.each`
     name                      | state
     ${'start state'}          | ${startState}
-    ${'query requestsed'}     | ${queryRequested}
+    ${'query requested'}      | ${queryRequested}
     ${'attestation provided'} | ${attestationProvided}
     ${'query declined'}       | ${queryDeclined}
   `('it works for $name', ({state}) => {
