@@ -6,7 +6,7 @@ on:
   workflow_dispatch: {}
 
 jobs:
-  publish-to-npm:
+  update-statechannels-packages-to-next:
     runs-on: ubuntu-latest
     steps:
       - name: Check out source code
@@ -46,3 +46,4 @@ jobs:
           branch: upgrade-statechannels-pkgs
           title: Upgrade @statechannels packages to @next tag
           body: This PR was created automatically by a github action.
+          commit-message: upgrade statechannels packages to next tag
