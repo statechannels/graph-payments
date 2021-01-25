@@ -28,6 +28,8 @@ jobs:
             ${{ runner.os }}-yarn-cache-v2-
 
       - name: yarn install
+        env:
+          SKIP_PREPARE: true # the upgrades may well prevent our packages compiling
         run: |
           yarn workspace @graphprotocol/payments upgrade @statechannels/server-wallet@next @statechannels/client-api-schema@next @statechannels/wallet-core@next -E
           yarn workspace @graphprotocol/receipts upgrade @statechannels/server-wallet@next @statechannels/client-api-schema@next @statechannels/wallet-core@next -E
