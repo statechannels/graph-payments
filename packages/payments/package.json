@@ -1,9 +1,9 @@
 {
   "name": "@graphprotocol/payments",
   "version": "0.0.1",
-  "description": "State Channel Payment Manager",
+"description": "Graph Network State Channel Payment Management",
   "repository": "https://github.com/statechannels/graph-payments",
-  "author": "Graph Protocol, Inc.",
+  "author": "State Channels",
   "private": false,
   "main": "dist/index.js",
   "types": "dist/index.d.ts",

@@ -1,11 +1,11 @@
 {
   "name": "@graphprotocol/receipts",
   "version": "0.0.1",
-  "description": "State Channel Receipt Manager",
+  "description": "Graph Network State Channel Receipt Manager",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
-  "repository": "https://github.com/graphprotocol/indexer",
-  "author": "Graph Protocol",
+  "repository": "https://github.com/statechannels/graph-payments",
+  "author": "State Channels",
   "private": false,
   "scripts": {
     "lint:check": "eslint . --ext .ts --cache",
