@@ -2,32 +2,41 @@ import {Address, toAddress} from '@graphprotocol/common-ts';
 import {fromJS, nullState} from '@graphprotocol/statechannels-contracts';
 import {ChannelResult} from '@statechannels/client-api-schema';
 
-import {createTestLogger} from '../../__tests__/setup';
-import {ChannelCache} from '../types';
-import pino from 'pino';
+import {CACHE_TEST_DB_CONNECTION_STRING, createTestLogger} from '../../__tests__/setup';
 import {ChannelSnapshot} from '../../types';
-import {PostgresCache} from '../postgres-cache';
-import {knex} from '../../knexfile';
+import {createPostgresCache} from '../postgres-cache';
 import {BigNumber} from 'ethers';
 import _ from 'lodash';
+import Knex from 'knex';
+import {createKnex, migrateCacheDB} from '../../db/utils';
+import {makeDestination} from '@statechannels/wallet-core';
 
 const baseLogger = createTestLogger('/tmp/channel-cache.log');
 baseLogger.level = 'debug';
+let knex: Knex;
+const cache = createPostgresCache(CACHE_TEST_DB_CONNECTION_STRING);
+const logger = baseLogger.child({test: 'Postgres cache'});
 
+10_000;
 const doNothing = async (snapshot: ChannelSnapshot) => ({snapshot, result: undefined});
 beforeAll(async () => {
-  await knex.migrate.latest();
+  knex = createKnex(CACHE_TEST_DB_CONNECTION_STRING);
+  await migrateCacheDB(knex);
+
   await knex.table('payment_manager.payment_channels').truncate();
+  await knex.table('payment_manager.ledger_channels').truncate();
 });
 afterAll(async () => {
   await knex.destroy();
 });
-
-const testCacheImplementation = (cache: ChannelCache, logger: pino.Logger) => async (): Promise<
-  void
-> => {
+// TODO: Now that we don't have the memory cache this test seems pretty ugly :(
+test('various cache tests', async () => {
   logger.info('create a couple of channels');
-  await cache.insertChannels(allocation0.id, [allocation0.channel0.state3]);
+  const result = await cache.insertChannels(allocation0.id, [allocation0.channel0.state3]);
+  expect(result).toHaveLength(1);
+  expect(result).toContain(allocation0.channel0.id);
+  // Inserting the same result the second time should not return the channel id
+  expect(await cache.insertChannels(allocation0.id, [allocation0.channel0.state3])).toHaveLength(0);
   await cache.insertChannels(allocation1.id, [
     allocation1.channel1.state0,
     allocation1.channel2.state0
@@ -72,7 +81,10 @@ const testCacheImplementation = (cache: ChannelCache, logger: pino.Logger) => as
       result: undefined
     };
   });
-  expect(await cache.stalledChannels(0, 1)).toEqual([stalledId]);
+  expect(await cache.stalledChannels(0, {limit: 1})).toEqual([stalledId]);
+  expect(await cache.stalledChannels(0, {limit: 0})).toHaveLength(0);
+  expect(await cache.stalledChannels(0, {contextIds: [allocation0.id]})).toHaveLength(1);
+  expect(await cache.stalledChannels(0, {contextIds: [allocation1.id]})).toHaveLength(0);
 
   await cache.acquireChannel(allocation1.id, async (snapshot) => {
     const {channelId} = snapshot;
@@ -85,7 +97,7 @@ const testCacheImplementation = (cache: ChannelCache, logger: pino.Logger) => as
     allocation1.channel2.id
   ]);
   logger.info('check that the channel not updated does not appear stalled');
-  expect(await cache.stalledChannels(0)).toEqual([stalledId]);
+  expect(await cache.stalledChannels(0, {})).toEqual([stalledId]);
 
   logger.info('check that we can retire channels');
   await expect(cache.retireChannels(allocation0.id)).resolves.toEqual({
@@ -128,13 +140,19 @@ const testCacheImplementation = (cache: ChannelCache, logger: pino.Logger) => as
   logger.info('check we can remove channels');
   await cache.removeChannels([allocation0.channel0.id]);
   // TODO: expect(await cache.activeAllocations()).toMatchObject({[allocation1.id]: 2});
-};
+});
 
-test(
-  'Postgres cache',
-  testCacheImplementation(PostgresCache, baseLogger.child({test: 'Postgres cache'})),
-  10_000
-);
+test('cache can store and retrieve initial ledger state info', async () => {
+  const channelId = allocation1.channel1.id;
+  const allocationId = allocationId1;
+  const {allocations} = allocation1.channel1.state0;
+
+  await cache.insertLedgerChannel(allocationId, channelId, allocations);
+
+  const result = await cache.getInitialLedgerStateInfo(channelId);
+
+  expect(result.outcome).toMatchObject(allocations);
+});
 
 const allocationId0 = toAddress('0x0000000000000000000000000000000000000000');
 const allocation0 = {
@@ -161,6 +179,8 @@ const allocation1 = {
 
 function buildChannel(channelId: string, allocationId: Address, turnNum: number): ChannelResult {
   return {
+    fundingStatus: 'Funded',
+    challengeStatus: 'No Challenge Detected',
     participants: [
       {
         participantId: 'gateway',
@@ -178,7 +198,7 @@ function buildChannel(channelId: string, allocationId: Address, turnNum: number)
         assetHolderAddress: '0xtoken',
         allocationItems: [
           {destination: '0xgateway', amount: '0xa'},
-          {destination: `0x${allocationId}`, amount: '0x0'}
+          {destination: makeDestination(allocationId), amount: '0x0'}
         ]
       }
     ],

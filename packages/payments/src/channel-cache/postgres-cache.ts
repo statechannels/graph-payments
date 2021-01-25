@@ -1,22 +1,21 @@
-import {ChannelCache, CacheMaintainerAPI, CacheUserAPI} from './types';
+import {
+  CacheMaintainerAPI,
+  CacheUserAPI,
+  CacheUtilitiesAPI,
+  ChannelCache,
+  StalledChannelsOpts
+} from './types';
 
 import {Allocation, ChannelResult} from '@statechannels/client-api-schema';
 import {BigNumber} from 'ethers';
 import {ChannelSnapshot} from '../types';
 
-import {CONNECTION_STRING, TABLE} from '../db/constants';
+import {TABLE} from '../db/constants';
 import {extractSnapshot} from '../utils';
-import createPGP, {IDatabase, ITask, PreparedStatement} from 'pg-promise';
+import createPGP, {IDatabase, IMain, ITask, PreparedStatement} from 'pg-promise';
 import _ from 'lodash';
-
-const pgp = createPGP();
-const db = pgp(CONNECTION_STRING);
-
-let destroyed = false;
-export const destroy = (): void => {
-  if (!destroyed) db.$pool.end();
-  destroyed = true;
-};
+import {createKnex, migrateCacheDB} from '../db/utils';
+import {DatabaseConnectionConfiguration} from '..';
 
 type Row = {
   context_id: string;
@@ -26,6 +25,12 @@ type Row = {
   payer_balance: string;
   turn_number: number;
   outcome: [Allocation];
+};
+
+type LedgerRow = {
+  channel_id: string;
+  context_id: string;
+  initial_outcome: [Allocation];
 };
 
 const OUR_TURN = 'turn_number % 2 = 1';
@@ -76,21 +81,6 @@ function convertRowToSnapshot(row: Row): ChannelSnapshot {
 
 const table = {table: 'payment_channels', schema: 'payment_manager'};
 
-const insertColumns = new pgp.helpers.ColumnSet(
-  [
-    'app_data',
-    'channel_id',
-    'context_id',
-    'payer_balance',
-    'receiver_balance',
-    'turn_number',
-    'outcome'
-  ],
-  {table}
-);
-
-const retiredColumns = new pgp.helpers.ColumnSet(['retired'], {table});
-
 const channelResultToRow = (cr: ChannelResult) => ({
   app_data: cr.appData,
   channel_id: cr.channelId,
@@ -98,128 +88,190 @@ const channelResultToRow = (cr: ChannelResult) => ({
   outcome: JSON.stringify(cr.allocations)
 });
 
-export const ChannelManagement: CacheMaintainerAPI = {
-  insertLedgerChannel: async (allocationId: string, channelId: string): Promise<void> => {
-    const row = {channel_id: channelId, context_id: allocationId};
-    const columns = new pgp.helpers.ColumnSet(['channel_id', 'context_id'], {
-      table: {table: 'ledger_channels', schema: 'payment_manager'}
-    });
-    await db.none(pgp.helpers.insert(row, columns));
-  },
+function createChannelManagement(pgp: IMain, db: IDatabase<unknown>): CacheMaintainerAPI {
+  const insertColumns = new pgp.helpers.ColumnSet(
+    [
+      'app_data',
+      'channel_id',
+      'context_id',
+      'payer_balance',
+      'receiver_balance',
+      'turn_number',
+      'outcome'
+    ],
+    {table}
+  );
 
-  removeLedgerChannels: async (channelIds: string[]): Promise<void> => {
-    if (channelIds.length === 0) return;
-    await db.none(
-      `DELETE FROM payment_manager.ledger_channels WHERE channel_id in ($1)`,
-      channelIds
-    );
-  },
+  const retiredColumns = new pgp.helpers.ColumnSet(['retired'], {table});
 
-  getLedgerChannel: async (allocationId: string): Promise<string | undefined> => {
-    const query = pgp.as.format(
-      'SELECT channel_id FROM payment_manager.ledger_channels WHERE context_id = ${allocationId}',
-      {allocationId}
-    );
-    const result = await db.oneOrNone(query);
-    return result?.channel_id;
-  },
-
-  insertChannels: async (allocationId: string, channels: ChannelResult[]) => {
-    const rows = channels.map((channelResult) => {
-      const [payer_balance, receiver_balance] = channelResult.allocations[0].allocationItems.map(
-        (allocationItem) => allocationItem.amount
+  return {
+    getInitialLedgerStateInfo: async (channelId) => {
+      const query = pgp.as.format(
+        'SELECT initial_outcome FROM payment_manager.ledger_channels WHERE channel_id = ${channelId}',
+        {channelId}
       );
-
-      return {
-        ...channelResultToRow(channelResult),
+      const result: LedgerRow = await db.one(query);
+      const {initial_outcome: outcome} = result;
+      return {outcome};
+    },
+    insertLedgerChannel: async (allocationId, channelId, initialOutcome): Promise<void> => {
+      const row = {
+        channel_id: channelId,
         context_id: allocationId,
-        payer_balance,
-        receiver_balance
+        initial_outcome: JSON.stringify(initialOutcome)
       };
-    });
+      const columns = new pgp.helpers.ColumnSet(['channel_id', 'context_id', 'initial_outcome'], {
+        table: {table: 'ledger_channels', schema: 'payment_manager'}
+      });
+      await db.none(pgp.helpers.insert(row, columns));
+    },
 
-    await db.none(pgp.helpers.insert(rows, insertColumns));
-  },
+    removeLedgerChannels: async (channelIds: string[]): Promise<void> => {
+      if (channelIds.length === 0) return;
+      await db.none(
+        `DELETE FROM payment_manager.ledger_channels WHERE channel_id in ($1)`,
+        channelIds
+      );
+    },
 
-  removeChannels: async (channelIds: string[]) => {
-    if (channelIds.length > 0) {
-      const query = `
+    getLedgerChannels: async (allocationId: string): Promise<string[]> => {
+      const query = pgp.as.format(
+        'SELECT channel_id FROM payment_manager.ledger_channels WHERE context_id = ${allocationId}',
+        {allocationId}
+      );
+      const result = await db.manyOrNone(query);
+      return result.map((r) => r.channel_id);
+    },
+
+    /**
+     *
+     * @param allocationId context_id stored in the DB
+     * @param channels list of channels to insert
+     *
+     * Inserts each channel into the DB.
+     *
+     * In the event of a conflict on the `channel_id`, sets the turn_number to 3.
+     * This signals to payment managers that the channel is "ready to be used"
+     */
+    insertChannels: async (allocationId: string, channels: ChannelResult[]) => {
+      const rows = channels.map((channelResult) => {
+        const [payer_balance, receiver_balance] = channelResult.allocations[0].allocationItems.map(
+          (allocationItem) => allocationItem.amount
+        );
+
+        return {
+          ...channelResultToRow(channelResult),
+          context_id: allocationId,
+          payer_balance,
+          receiver_balance
+        };
+      });
+
+      const query = `\
+      ${pgp.helpers.insert(rows, insertColumns)} 
+      ON CONFLICT (channel_id) DO UPDATE
+      SET turn_number = excluded.turn_number
+      WHERE payment_channels.turn_number = 0
+      AND excluded.turn_number = 3
+      RETURNING channel_id
+      `;
+
+      return (await db.manyOrNone(query)).map((row) => row.channel_id);
+    },
+
+    removeChannels: async (channelIds: string[]) => {
+      if (channelIds.length > 0) {
+        const query = `
         DELETE FROM ${TABLE}
         WHERE channel_id = any(${pgp.as.array(channelIds)})
       `;
-      await db.none(query);
-    }
-  },
+        await db.none(query);
+      }
+    },
 
-  retireChannels: async (allocationId: string) => {
-    const query = `
+    retireChannels: async (allocationId: string) => {
+      const query = `
       ${pgp.helpers.update({retired: true}, retiredColumns)}
       WHERE ${pgp.as.format('context_id = ${allocationId}', {allocationId})}
       AND ${NOT_RETIRED}
       RETURNING receiver_balance, channel_id
     `;
-    const rows = await db.manyOrNone(query);
-    const amount = rows
-      .map((row) => BigNumber.from(row.receiver_balance))
-      .reduce((sum, amt) => sum.add(amt), BigNumber.from(0))
-      .toHexString();
+      const rows = await db.manyOrNone(query);
+      const amount = rows
+        .map((row) => BigNumber.from(row.receiver_balance))
+        .reduce((sum, amt) => sum.add(amt), BigNumber.from(0))
+        .toHexString();
 
-    const channelIds = rows.map((row) => row.channel_id);
+      const channelIds = rows.map((row) => row.channel_id);
 
-    return {amount, channelIds};
-  },
+      return {amount, channelIds};
+    },
 
-  activeAllocations: async (allocationIds?: string[]) => {
-    let query = `SELECT context_id, count(*) FROM ${TABLE} WHERE NOT ${RETIRED}`;
-    if (allocationIds) query = `${query} AND context_id = any(${pgp.as.array(allocationIds)})`;
+    activeAllocations: async (allocationIds?: string[]) => {
+      let query = `SELECT context_id, count(*) FROM ${TABLE} WHERE NOT ${RETIRED}`;
+      if (allocationIds) query = `${query} AND context_id = any(${pgp.as.array(allocationIds)})`;
 
-    query = `${query} GROUP BY context_id`;
-    return _.reduce(
-      await db.manyOrNone(query),
-      (result, row) => {
-        result[row.context_id] = Number(row.count);
-        return result;
-      },
-      {} as Record<string, number>
-    );
-  },
+      query = `${query} GROUP BY context_id`;
+      return _.reduce(
+        await db.manyOrNone(query),
+        (result, row) => {
+          result[row.context_id] = Number(row.count);
+          return result;
+        },
+        {} as Record<string, number>
+      );
+    },
 
-  activeChannels: async (allocationId: string) => {
-    const query = `
+    activeChannels: async (allocationId: string) => {
+      const query = `
       SELECT channel_id FROM ${TABLE} 
       WHERE ${NOT_RETIRED}
       AND ${pgp.as.format('context_id = $1', allocationId)}
     `;
-    const rows = await db.manyOrNone(query);
-    return rows.map((row) => row.channel_id);
-  },
+      const rows = await db.manyOrNone(query);
+      return rows.map((row) => row.channel_id);
+    },
 
-  closableChannels: async () => {
-    const query = `
+    closableChannels: async () => {
+      const query = `
       SELECT channel_id, context_id FROM ${TABLE} 
       WHERE ${RETIRED}
     `;
-    const rows = await db.manyOrNone(query);
-    const grouped = _.groupBy(rows, (r) => r.context_id);
+      const rows = await db.manyOrNone(query);
+      const grouped = _.groupBy(rows, (r) => r.context_id);
 
-    return _.mapValues(grouped, (rows) => rows.map((r) => r.channel_id));
-  },
+      return _.mapValues(grouped, (rows) => rows.map((r) => r.channel_id));
+    },
 
-  stalledChannels: async (stallDurationMS: number, limit?: number) => {
-    let query = `
+    readyingChannels: async (contextId: string) => {
+      const query = `
+      SELECT channel_id FROM ${TABLE} 
+      WHERE ${NOT_RETIRED}
+      AND turn_number = 0
+      AND ${pgp.as.format('context_id = $1', contextId)}
+      `;
+
+      return db.manyOrNone(query).then((rows) => rows.map((row) => row.channel_id));
+    },
+
+    stalledChannels: async (stallDurationMS: number, opts: StalledChannelsOpts) => {
+      const {limit, contextIds} = opts;
+      let query = `
       SELECT channel_id FROM ${TABLE}
       WHERE ${NOT_OUR_TURN}
       AND ${NOT_RETIRED}
       AND updated_at <= now() - interval '${stallDurationMS} milliseconds'
     `;
-    // We assume that we were passed limit != 0, since limit === 0 does not make sense
-    // In case some channels are permanently stalled, we order by random().
-    if (limit) query = `${query} ORDER BY random() LIMIT ${limit}`;
-    const rows = await db.manyOrNone(query);
-    return rows.map((row) => row.channel_id);
-  }
-};
+      // We assume that we were passed limit != 0, since limit === 0 does not make sense
+      // In case some channels are permanently stalled, we order by random().
+      if (contextIds) query = `${query} AND context_id = any(${pgp.as.array(contextIds)})`;
+      if (typeof limit === 'number') query = `${query} ORDER BY random() LIMIT ${limit}`;
 
+      const rows = await db.manyOrNone(query);
+      return rows.map((row) => row.channel_id);
+    }
+  };
+}
 const acquireChannel = new PreparedStatement({
   name: 'AcquireChannel',
   text: `
@@ -232,38 +284,70 @@ const acquireChannel = new PreparedStatement({
   `
 });
 
-export const PaymentManagement: CacheUserAPI = {
-  acquireChannel: async <T>(
-    allocationId: string,
-    criticalCode: (snapshot: ChannelSnapshot) => Promise<{snapshot: ChannelSnapshot; result: T}>
-  ) => {
-    return await db.tx(async (tx) => {
-      const row = await tx.oneOrNone(acquireChannel, [allocationId]);
+export function createPaymentManagement(pgp: IMain, db: IDatabase<unknown>): CacheUserAPI {
+  return {
+    acquireChannel: async <T>(
+      allocationId: string,
+      criticalCode: (snapshot: ChannelSnapshot) => Promise<{snapshot: ChannelSnapshot; result: T}>
+    ) => {
+      return await db.tx(async (tx) => {
+        const row = await tx.oneOrNone(acquireChannel, [allocationId]);
 
-      if (!row) {
-        throw new CacheError('No free channels found', allocationId);
+        if (!row) {
+          throw new CacheError('No free channels found', allocationId);
+        }
+
+        const {snapshot, result} = await criticalCode(convertRowToSnapshot(row));
+
+        await updateCache(snapshot, tx);
+
+        return result;
+      });
+    },
+
+    submitReceipt: async (channel) => {
+      const ourTurn = channel.turnNum % 2 === 1;
+      if (!ourTurn && channel.turnNum !== 0) {
+        throw new Error(`Cannot submit receipt on our turn: ${channel.turnNum}`);
       }
-
-      const {snapshot, result} = await criticalCode(convertRowToSnapshot(row));
-
-      await updateCache(snapshot, tx);
-
-      return result;
-    });
-  },
-
-  submitReceipt: async (channel) => {
-    const ourTurn = channel.turnNum % 2 === 1;
-    if (!ourTurn && channel.turnNum !== 0) {
-      throw new Error(`Cannot submit receipt on our turn: ${channel.turnNum}`);
+      const snapshot = extractSnapshot(channel);
+      await updateCache(snapshot, db);
+      return snapshot;
     }
-    const snapshot = extractSnapshot(channel);
-    await updateCache(snapshot, db);
-    return snapshot;
-  }
-};
+  };
+}
 
-export const PostgresCache: ChannelCache = {...PaymentManagement, ...ChannelManagement};
+function createCacheUtilities(
+  pgp: IMain,
+  db: IDatabase<unknown>,
+  databaseConnection: DatabaseConnectionConfiguration
+): CacheUtilitiesAPI {
+  return {
+    initialize: async () => {
+      const knex = createKnex(databaseConnection);
+      await migrateCacheDB(knex);
+      knex.destroy();
+    },
+    destroy: async () => pgp.end(),
+    clearCache: () =>
+      Promise.all([
+        db.none('TRUNCATE payment_manager.payment_channels'),
+        db.none('TRUNCATE payment_manager.ledger_channels')
+      ])
+  };
+}
+
+export function createPostgresCache(
+  databaseConnection: DatabaseConnectionConfiguration
+): ChannelCache {
+  const pgp = createPGP();
+  const db = pgp(databaseConnection);
+  return {
+    ...createChannelManagement(pgp, db),
+    ...createPaymentManagement(pgp, db),
+    ...createCacheUtilities(pgp, db, databaseConnection)
+  };
+}
 
 class CacheError extends Error {
   constructor(reason: string, public readonly allocationId: string) {

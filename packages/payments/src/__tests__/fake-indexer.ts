@@ -16,13 +16,48 @@ import {
   Payload as WirePayload,
   Message as WireMessage
 } from '@statechannels/wire-format';
-import {Wallet} from 'ethers';
-import {Logger} from '@graphprotocol/common-ts';
+import {BigNumber, constants, utils, Wallet} from 'ethers';
+import {Logger, SubgraphDeploymentID} from '@graphprotocol/common-ts';
 import {Allocation, QueryExecutionResult} from '../query-engine-types';
 import {isLedgerChannel} from '../utils';
 import {buildTestAllocation} from './crash-test-dummies';
-import {toAttestationProvided} from '@graphprotocol/statechannels-contracts';
-import {getTestAttestation} from '../../../e2e-testing/src/utils';
+import {signAttestation, toAttestationProvided} from '@graphprotocol/statechannels-contracts';
+import {defaultTestConfig} from '@statechannels/server-wallet';
+import base58 from 'bs58';
+
+const RECEIPT_PRIVATE_KEY = '0xa69a8d9fde414bdf8b5d76bbff63bd78704fe3da1d938cd10126a9e2e3e0e11f';
+
+const TEST_SUBGRAPH_ID = new SubgraphDeploymentID(
+  base58.encode([
+    0x12,
+    0x20,
+    ...utils.arrayify(utils.sha256(Buffer.from('network-subgraph-indexer-1')))
+  ])
+);
+
+const REQUEST_CID = utils.hexZeroPad('0x1', 32);
+const RESPONSE_CID = utils.hexZeroPad('0x2', 32);
+// We want to use the same chainId that we use in the payment manager/ receipt manager
+const CHAIN_ID = BigNumber.from(defaultTestConfig().networkConfiguration.chainNetworkID).toNumber();
+const VERIFYING_CONTRACT = constants.AddressZero;
+
+const getTestAttestation = async (
+  privateKey = RECEIPT_PRIVATE_KEY
+): Promise<{responseCID: string; signature: string}> => {
+  const signature = await signAttestation(
+    privateKey,
+    REQUEST_CID,
+    RESPONSE_CID,
+    TEST_SUBGRAPH_ID.toString(),
+    CHAIN_ID,
+    VERIFYING_CONTRACT
+  );
+
+  return {
+    responseCID: RESPONSE_CID,
+    signature
+  };
+};
 
 interface FakeIndexerParams {
   privateKey?: string;
@@ -35,6 +70,7 @@ export class FakeIndexer {
   private logger?: Logger;
   public address: string;
   private blocking = false;
+  private online = true;
   private blocks: Block[] = [];
 
   constructor({privateKey, logger}: FakeIndexerParams) {
@@ -45,12 +81,17 @@ export class FakeIndexer {
     this.logger?.debug(`Fake indexer address: ${this.address}`);
   }
 
+  private async modifyBehaviour(): Promise<void> {
+    await this.delayIfBlocking();
+    this.throwIfOffline();
+  }
+
   async pushMessage(message: WireMessage): Promise<WireMessage> {
     this.logger?.debug('pushMessage', message);
 
     const payload = await this._pushPayload(message.data);
 
-    await this.delayIfBlocking();
+    await this.modifyBehaviour();
 
     return Promise.resolve({recipient: '', sender: '', data: payload});
   }
@@ -58,7 +99,7 @@ export class FakeIndexer {
   async pushPayload(payload: unknown): Promise<WirePayload> {
     const result = this._pushPayload(payload);
 
-    await this.delayIfBlocking();
+    await this.modifyBehaviour();
 
     return Promise.resolve(result);
   }
@@ -80,18 +121,24 @@ export class FakeIndexer {
 
     const handleState = async (wireState: WireState): Promise<WireState | undefined> => {
       // if conclude, propose, postFundSetup
-      if (wireState.isFinal || wireState.turnNum === 0) {
+      if (wireState.turnNum === 0) {
         this.logger?.debug(
           `Received and signing state ${wireState.turnNum} from channel ${wireState.channelNonce}`
         );
         // sign and return
+        return this.signState(wireState);
+      } else if (wireState.isFinal) {
+        this.logger?.debug(
+          `Received and signing isFinal state ${wireState.turnNum} from channel ${wireState.channelNonce}`
+        );
+        // sign and return
         return this.signState({...incTurnNum(wireState), signatures: []});
-      } else if (wireState.turnNum === 2) {
+      } else if (wireState.turnNum === 3) {
         this.logger?.debug(
           `Received a postfund state ${wireState.turnNum} from channel ${wireState.channelNonce}`
         );
         // sign and return
-        return this.signState({...incTurnNum(wireState), signatures: []});
+        return this.signState(wireState);
       } else if (wireState.turnNum >= 3 && isLedgerChannel(wireState)) {
         this.logger?.debug(`Received a ledger update for ${wireState.channelId}`);
 
@@ -108,13 +155,13 @@ export class FakeIndexer {
         );
 
         const attestation = await getTestAttestation();
-        const {allocations, appData} = toAttestationProvided(
+        const {allocation, appData} = toAttestationProvided(
           prevAppData,
-          prevAllocations,
+          prevAllocations[0],
           attestation.responseCID,
           attestation.signature
         );
-        const newOutcome = serializeOutcome(deserializeAllocations(allocations));
+        const newOutcome = serializeOutcome(deserializeAllocations([allocation]));
 
         return this.signState({
           ...incTurnNum(wireState),
@@ -149,6 +196,20 @@ export class FakeIndexer {
     };
 
     return serializeState(signedState);
+  }
+
+  public goOffline(): void {
+    this.logger?.debug(`FakeIndexer offline`);
+    this.online = false;
+  }
+
+  public goOnline(): void {
+    this.logger?.debug(`FakeIndexer online`);
+    this.online = true;
+  }
+
+  private throwIfOffline() {
+    if (!this.online) throw new Error('FakeIndexer is offline');
   }
 
   public block(): void {

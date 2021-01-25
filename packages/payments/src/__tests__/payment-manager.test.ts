@@ -1,42 +1,36 @@
-process.env.SERVER_DB_NAME = 'payer';
-process.env.SERVER_DB_HOST = 'localhost';
-process.env.SERVER_DB_PORT = '5432';
-process.env.SERVER_DB_USER = 'postgres';
-
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
 import {NetworkContracts} from '@graphprotocol/common-ts';
 import {FakeIndexer} from './fake-indexer';
 import {TEST_ALLOCATION, TEST_PAYMENT} from './crash-test-dummies';
+import {Wallet as ChannelWallet} from '@statechannels/server-wallet';
 
 import * as fs from 'fs';
 
-import {createTestLogger} from './setup';
+import {
+  createTestLogger,
+  PAYMENT_MANAGER_TEST_DB_CONNECTION_STRING,
+  PAYMENT_MANAGER_TEST_DB_NAME
+} from './setup';
 import {constants} from 'ethers';
-import {knex} from '../knexfile';
 import {TestChannelManager} from './test-channel-manager';
-import {MemoryCache, PostgresCache} from '../channel-cache';
+import {createPostgresCache} from '../channel-cache';
 import {TestPaymentManager} from './test-payment-manager';
-import {ChannelManager} from '../channel-manager';
-import {RECEIPT_PRIVATE_KEY} from '../../../e2e-testing/src/constants';
+import {ChannelManager, ChannelManagerOptions} from '../channel-manager';
 import {ChannelManagerInsightEvent} from '../insights';
-import {ChannelManagerOptions} from '../../dist/channel-manager';
 import {BN} from '@statechannels/wallet-core';
 import {Allocation} from '../query-engine-types';
 import {
   defaultTestConfig,
   overwriteConfigWithDatabaseConnection
-} from '@statechannels/server-wallet/lib/src/config';
+} from '@statechannels/server-wallet';
 
 jest.setTimeout(30_000);
+const RECEIPT_PRIVATE_KEY = '0xa69a8d9fde414bdf8b5d76bbff63bd78704fe3da1d938cd10126a9e2e3e0e11f';
 const DESTINATION_ADDRESS = '0xabc3F8C6836F01Fd39Cc1D1ca110F25D907Ce1CE';
 const LOG_FILE = '/tmp/payment-manager-test.log';
 // const LOG_FILE = undefined // turn off logging
 
-// TODO: This was copied from development.env
-// This should be cleaned up !!
-const PAYMENT_MANAGER_CONNECTION =
-  process.env.PAYMENT_MANAGER_CONNECTION || 'postgresql://postgres@localhost/payer';
 const logger = createTestLogger(LOG_FILE).child({name: 'payment-manager'});
 logger.level = 'debug';
 
@@ -44,16 +38,34 @@ const mockCollect = jest.fn(() => ({hash: constants.HashZero}));
 
 const mockContracts = {
   assetHolder: {address: constants.AddressZero},
-  attestationApp: {address: constants.AddressZero},
+  attestationApp: {address: '0x0000000000000000000000000000000000111121' /* nonzero */},
   staking: {
     collect: mockCollect as any
   },
   disputeManager: {address: constants.AddressZero}
 } as NetworkContracts;
 const walletConfig = overwriteConfigWithDatabaseConnection(
-  defaultTestConfig,
-  PAYMENT_MANAGER_CONNECTION
+  defaultTestConfig(),
+  PAYMENT_MANAGER_TEST_DB_CONNECTION_STRING
 );
+
+const paymentWallet = ChannelWallet.create(
+  defaultTestConfig({
+    databaseConfiguration: {connection: {database: PAYMENT_MANAGER_TEST_DB_NAME}},
+    networkConfiguration: {
+      chainNetworkID: process.env.CHAIN_ID
+        ? parseInt(process.env.CHAIN_ID)
+        : defaultTestConfig().networkConfiguration.chainNetworkID
+    },
+    chainServiceConfiguration: {
+      attachChainService: false,
+      provider: process.env.RPC_ENDPOINT,
+      pk: '0x0000000000000000000000000000000000000000000000000000000000000000'
+    }
+  })
+);
+
+const cache = createPostgresCache(PAYMENT_MANAGER_TEST_DB_CONNECTION_STRING);
 const cmDefaultOpts: Pick<
   ChannelManagerOptions,
   | 'logger'
@@ -62,13 +74,15 @@ const cmDefaultOpts: Pick<
   | 'paymentChannelFundingAmount'
   | 'fundsPerAllocation'
   | 'walletConfig'
+  | 'cache'
 > = {
   logger,
   contracts: mockContracts,
   destinationAddress: DESTINATION_ADDRESS,
   paymentChannelFundingAmount: BN.from(1_000_000_000),
   fundsPerAllocation: BN.from(1_000_000_000_000),
-  walletConfig
+  walletConfig,
+  cache
 };
 
 type MessageSender = ChannelManagerOptions['messageSender'];
@@ -81,22 +95,25 @@ async function dummyChannelManager(): Promise<ChannelManager> {
 }
 let dummyCM: ChannelManager;
 
-beforeAll(async () => {
+beforeAll(async (done) => {
+  logger.info('starting test');
   dummyCM = await dummyChannelManager();
   await dummyCM.prepareDB();
   LOG_FILE && fs.existsSync(LOG_FILE) && fs.truncateSync(LOG_FILE);
+
+  done();
 });
 
-beforeEach(async () => {
-  logger.info(`Truncating ${process.env.SERVER_DB_NAME}`);
+beforeEach(async (done) => {
+  logger.info(`Truncating ${PAYMENT_MANAGER_TEST_DB_NAME}`);
   await dummyCM.truncateDB();
+  done();
 });
 
-afterAll(async () => {
+afterAll(async (done) => {
+  logger.info('shutting down');
   await dummyCM._shutdown();
-  logger.info('Wallet knex destroyed');
-  await knex.destroy();
-  logger.info('knex destroyed');
+  done();
 });
 
 const request = (allocation: Allocation, capacity = 2) => ({
@@ -134,7 +151,6 @@ describe('ChannelManager', () => {
 
     // setup channel manager
     const messageSender: MessageSender = (_addr, payload) => fakeIndexer.pushPayload(payload);
-    const cache = PostgresCache;
     const fundingStrategy = 'Fake'; // <-- Fake ledger channel
     const channelManager = await TestChannelManager.create({
       ...cmDefaultOpts,
@@ -166,7 +182,7 @@ describe('ChannelManager', () => {
     logger.info('make two payments');
     const makePayment = async () => {
       logger.debug(`creating payment for ${allocationId}`);
-      const payment = await paymentManager.createPayment(allocationId, TEST_PAYMENT);
+      const payment = await paymentManager.createPayment(TEST_PAYMENT);
       logger.debug(`payment created for ${allocationId}`);
       const result = await fakeIndexer.pushPayload(payment as any);
       logger.debug('response received from indexer');
@@ -202,10 +218,6 @@ describe('ChannelManager', () => {
     // Uncomment after ledger funding is required
     // await expect(channelManager.ledgerChannelExists(allocationId)).resolves.not.toBeTruthy();
     await expect(channelManager.activeChannelCount(allocationId)).resolves.toEqual(0);
-
-    logger.info('close db connections, so test exits ');
-    await channelManager._shutdown();
-    await paymentManager._shutdown();
   });
 
   test('reallocating', async () => {
@@ -229,9 +241,6 @@ describe('ChannelManager', () => {
     // reopen allocations
     await channelManager.syncAllocations([request(fakeIndexer.allocation(allocationId))]);
     expect(await channelManager.activeChannelCount(allocationId)).toEqual(2); // now we should have more
-
-    // close db connections, so test exits
-    await channelManager._shutdown();
   });
 
   // tests that the payment manager loads data from the wallet on startup
@@ -241,41 +250,44 @@ describe('ChannelManager', () => {
     const allocationId = TEST_ALLOCATION.id;
 
     // setup channel manager
-    const cache = new MemoryCache();
     const messageSender: MessageSender = (_addr, payload) => fakeIndexer.pushPayload(payload);
     const channelManager = await TestChannelManager.create({
       ...cmDefaultOpts,
       messageSender,
-      cache
+      syncOpeningChannelsMaxAttempts: 1
     });
-    const paymentManager = await TestPaymentManager.create({
-      walletConfig,
-      logger,
-      cache: cache
-    });
+
+    // block the indexer and syncAllocations
+    fakeIndexer.goOffline();
 
     // sync allocations
     await channelManager.syncAllocations([request(fakeIndexer.allocation(allocationId))]);
     expect(await channelManager.activeChannelCount(allocationId)).toEqual(2);
 
-    // block the indexer and make a payment
-    fakeIndexer.block();
-    const payment = await paymentManager.createPayment(allocationId, TEST_PAYMENT);
-    const result = fakeIndexer.pushPayload(payment);
+    fakeIndexer.goOnline();
+    const paymentManager = await TestPaymentManager.create({
+      walletConfig,
+      logger,
+      cache
+    });
+
+    await expect(paymentManager.createPayment(TEST_PAYMENT)).rejects.toThrowError(
+      'No free channels found'
+    );
 
     // now leave the old channel manager to one side and start a new one
     const channelManager2 = await TestChannelManager.create({...cmDefaultOpts, messageSender});
+    expect((await paymentWallet.getChannels()).channelResults).toHaveLength(2);
+    await channelManager2.syncAllocations([request(fakeIndexer.allocation(allocationId))]);
 
     // check it has created the correct payers
     expect(await channelManager2.activeChannelCount(allocationId)).toEqual(2);
 
-    // finally unblock the indexer, so we can finish the test
-    await fakeIndexer.unblock();
-    await paymentManager.submitReceipt(await result);
+    // Check that I can now create a payment
+    await expect(paymentManager.createPayment(TEST_PAYMENT)).resolves.toMatchObject({
+      signedStates: expect.any(Array)
+    });
 
-    // close db connections, so test exits
-    await channelManager._shutdown();
-    await channelManager2._shutdown();
-    await paymentManager._shutdown();
+    expect(await (await paymentWallet.getChannels()).channelResults.length).toEqual(2);
   });
 });

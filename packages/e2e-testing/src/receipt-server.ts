@@ -1,19 +1,24 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import express from 'express';
-import pino from 'pino';
 
 import bodyParser from 'body-parser';
 import {ReceiptManager} from '@graphprotocol/receipts';
-import {RECEIPT_PRIVATE_KEY, RECEIPT_SERVER_PORT, RECEIPT_SERVER_URL} from './constants';
+import {
+  RECEIPT_PRIVATE_KEY,
+  RECEIPT_SERVER_PORT,
+  RECEIPT_SERVER_URL,
+  TEST_ATTESTATION_APP_ADDRESS
+} from './constants';
 import {Argv, scriptName} from 'yargs';
 import throng from 'throng';
 import {createTestLogger, generateAttestations} from './utils';
 import {
   defaultTestConfig,
   overwriteConfigWithDatabaseConnection
-} from '@statechannels/server-wallet/lib/src/config';
+} from '@statechannels/server-wallet';
 import {ETHERLIME_ACCOUNTS} from '@statechannels/devtools';
 import {constants} from 'ethers';
-import {NetworkContracts} from '@graphprotocol/common-ts';
+import {Logger, NetworkContracts} from '@graphprotocol/common-ts';
 
 const builder = (yargs: Argv): Argv =>
   yargs
@@ -24,9 +29,12 @@ const builder = (yargs: Argv): Argv =>
     .boolean('cluster')
     .option('logFile', {type: 'string', required: true})
     .alias('l', 'logFile')
-    .option('numAllocations', {type: 'number', default: 1});
+    .option('numAllocations', {type: 'number', default: 1})
+    .option('pgUsername', {type: 'string', default: 'postgres'})
+    .alias('u', 'pgUsername')
+    .option('pgDatabase', {type: 'string', default: 'receipt'})
+    .alias('d', 'pgDatabase');
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AnyArgs = {[key: string]: any} & Argv['argv'];
 
 const commands = {
@@ -36,7 +44,7 @@ const commands = {
     builder,
     handler: async (args: AnyArgs): Promise<void> => {
       const logger = createTestLogger(args.logFile).child({module: 'ReceiptServer'});
-      logger.level = 'debug';
+      (logger as any).level = 'debug';
 
       const testContracts = {
         assetHolder: {
@@ -44,21 +52,24 @@ const commands = {
           address: process.env.ETH_ASSET_HOLDER_ADDRESS || constants.AddressZero
         },
         attestationApp: {
-          address: process.env.ATTESTATION_APP || constants.AddressZero
+          address: process.env.ATTESTATION_APP || TEST_ATTESTATION_APP_ADDRESS
         }
       } as NetworkContracts;
 
       const receiptManager = new ReceiptManager(
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         logger.child({module: 'ReceiptManager'}) as any,
         RECEIPT_PRIVATE_KEY,
         testContracts,
         {
-          ...overwriteConfigWithDatabaseConnection(defaultTestConfig, {dbName: 'receipt'}),
-          ethereumPrivateKey: ETHERLIME_ACCOUNTS[1].privateKey,
-          networkConfiguration: {
-            ...defaultTestConfig.networkConfiguration,
-            rpcEndpoint: process.env.RPC_ENDPOINT
+          ...overwriteConfigWithDatabaseConnection(defaultTestConfig(), {
+            database: args.pgDatabase,
+            user: args.pgUsername,
+            host: 'localhost'
+          }),
+          chainServiceConfiguration: {
+            attachChainService: !!process.env.RPC_ENDPOINT,
+            provider: process.env.RPC_ENDPOINT,
+            pk: ETHERLIME_ACCOUNTS[1].privateKey
           }
         }
       );
@@ -86,7 +97,7 @@ scriptName('payer')
 function startApp(
   receiptManager: ReceiptManager,
   attestations: Record<string, {signature: string; responseCID: string}>,
-  logger: pino.Logger,
+  logger: Logger,
   port: number
 ) {
   express()
@@ -101,12 +112,12 @@ function startApp(
         responseCID,
         signature
       });
-      logger.trace('provideAttestation response', messages);
+      logger.trace('provideAttestation response', messages as any);
       res.send(messages);
     })
     .post('/messages', async (req, res) => {
       const messages = await receiptManager.inputStateChannelMessage(req.body);
-      logger.trace('inputStateChannelMessage response', messages);
+      logger.trace('inputStateChannelMessage response', messages as any);
       res.send(messages);
     })
     .get('/', (_, res) => res.status(200).send('Ready to roll!'))

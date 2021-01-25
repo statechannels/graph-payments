@@ -3,4 +3,4 @@ export * from './receipt-manager';
 export {
   IncomingServerWalletConfig as WalletConfig,
   DatabaseConnectionConfiguration
-} from '@statechannels/server-wallet/lib/src/config';
+} from '@statechannels/server-wallet';

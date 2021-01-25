@@ -6,11 +6,11 @@ import {Logger, Metrics, NetworkContracts} from '@graphprotocol/common-ts';
 import {BN, makeDestination, Uint256} from '@statechannels/wallet-core';
 import {Outgoing, Wallet as ChannelWallet} from '@statechannels/server-wallet';
 import {ChannelResult, Participant} from '@statechannels/client-api-schema';
-import {IncomingServerWalletConfig as WalletConfig} from '@statechannels/server-wallet/lib/src/config';
+import {IncomingServerWalletConfig as WalletConfig} from '@statechannels/server-wallet';
 
 import * as Insights from './insights';
 import {Allocation, toAddress} from './query-engine-types';
-import {ChannelCache, MemoryCache} from './channel-cache';
+import {ChannelCache, createPostgresCache} from './channel-cache';
 import {
   summariseResponse,
   constructStartState,
@@ -21,12 +21,12 @@ import {
   convertBytes32ToAddress,
   extractCapacity
 } from './utils';
-import {knex} from './knexfile';
+
 import _ from 'lodash';
 import {getAttestionAppByteCode} from '@graphprotocol/statechannels-contracts';
-import {destroy} from './channel-cache/postgres-cache';
 import {Evt} from 'evt';
 import {BigNumber} from 'ethers';
+import AsyncLock from 'async-lock';
 
 export interface ChannelManagerOptions {
   logger: Logger;
@@ -36,16 +36,34 @@ export interface ChannelManagerOptions {
   fundsPerAllocation: string;
   paymentChannelFundingAmount: string;
   cache?: ChannelCache;
-  syncOpeningChannelsPollInterval?: number;
   destinationAddress: string;
   useLedger?: boolean;
   fundingStrategy?: 'Direct' | 'Fake';
   syncOpeningChannelsPollIntervalMS?: number;
+  syncOpeningChannelsMaxAttempts?: number;
   // Leaving this undefined means allocations are "ensured" (channels created) with infinite concurrency
   // This is not recommended -- it can overwhelm both the indexer and the gateway's DB
   ensureAllocationsConcurrency?: number;
   walletConfig: WalletConfig;
+
+  /**
+   * The amount of time (measured in MS) that a channel will take to be come finalized
+   * after being registered on chain with a challenge.
+   */
+  onChainChallengeDuration?: {
+    /**
+     * The challenge duration for ledger channels. Defaults to 1 hour.
+     */
+    ledgerChannel?: number;
+    /**
+     * CURRENTLY NOT IMPORTANT!!
+     * The finalization time for payment channels. Defaults to 10 minutes.
+     */
+    paymentChannel?: number;
+  };
 }
+const DEFAULT_LEDGER_CHALLENGE_TIMEOUT = 3_600_000; // One hour
+const DEFAULT_PAYMENT_CHALLENGE_TIMEOUT = 600_000; // 10 minutes
 
 export type EnsureAllocationRequest = {
   allocation: Allocation;
@@ -53,6 +71,8 @@ export type EnsureAllocationRequest = {
   type: 'SetTo' | 'IncreaseBy' | 'ScaleBy';
 };
 export type ChannelRequest = {allocation: Allocation; capacity: number};
+
+export type SyncChannelOpts = {limit?: number; allocationIds?: string[]};
 
 export type ChannelManagementAPI = {
   // Channel creation/destruction
@@ -62,7 +82,7 @@ export type ChannelManagementAPI = {
   channelCount(allocationIds?: string[]): Promise<Record<string, number | undefined>>;
 
   //
-  syncChannels(stalledFor: number, limit?: number): Promise<string[]>;
+  syncChannels(stalledFor: number, opts?: SyncChannelOpts): Promise<string[]>;
 
   // Channel insights
   channelInsights: Evt<Insights.ChannelManagerInsightEvent>;
@@ -82,6 +102,7 @@ export class ChannelManager implements ChannelManagementAPI {
   private paymentChannelFundingAmount: Uint256;
   private messageSender: (indexerUrl: string, payload: unknown) => Promise<unknown>;
   private contracts: NetworkContracts;
+  private challengeDurations: {ledgerChannel: number; paymentChannel: number};
 
   private useLedger = false;
 
@@ -90,6 +111,7 @@ export class ChannelManager implements ChannelManagementAPI {
 
   // This is used for polling on-chain funding status of ledger (if Direct)
   private syncOpeningChannelsPollIntervalMS: number;
+  private syncOpeningChannelsMaxAttempts: number;
   private ensureAllocationsConcurrency: number | undefined;
 
   // Allows consumers to have insights into what's going on with the channel manager
@@ -110,9 +132,7 @@ export class ChannelManager implements ChannelManagementAPI {
   }
 
   protected async populateCache(): Promise<void> {
-    await knex.table('payment_manager.payment_channels').truncate();
-    await knex.table('payment_manager.ledger_channels').truncate();
-
+    await this.cache.clearCache();
     const {channelResults} = await this.wallet.getChannels();
 
     this.logger.trace('Cache for payment channels being seeded from wallet database', {
@@ -126,10 +146,18 @@ export class ChannelManager implements ChannelManagementAPI {
       numLedger: ledgerChannels.length
     });
 
-    await this.insertReadyChannels(paymentChannels);
+    await this.insertActiveChannels(paymentChannels);
 
-    await pMap(ledgerChannels, ({channelId, participants: [, {destination: allocationId}]}) =>
-      this.cache.insertLedgerChannel(convertBytes32ToAddress(allocationId), channelId)
+    await pMap(
+      ledgerChannels,
+      ({channelId, allocations, fundingStatus, participants: [, {destination: allocationId}]}) => {
+        if (fundingStatus !== 'Defunded')
+          this.cache.insertLedgerChannel(
+            convertBytes32ToAddress(allocationId),
+            channelId,
+            allocations
+          );
+      }
     );
   }
 
@@ -137,9 +165,16 @@ export class ChannelManager implements ChannelManagementAPI {
     this.destinationAddress = opts.destinationAddress;
     this.fundsPerAllocation = BN.from(opts.fundsPerAllocation);
     this.paymentChannelFundingAmount = BN.from(opts.paymentChannelFundingAmount);
+
+    if (BN.gt(this.paymentChannelFundingAmount, this.fundsPerAllocation))
+      throw new Error(
+        'Invalid arguments to ChannelManager. paymentChannelFundingAmount cannot exceed fundsPerAllocation'
+      );
+
     this.logger = opts.logger.child({component: 'ChannelPaymentManager'});
     this.wallet = ChannelWallet.create(opts.walletConfig);
-    this.cache = opts.cache || new MemoryCache(this.logger);
+    this.cache =
+      opts.cache ?? createPostgresCache(opts.walletConfig.databaseConfiguration.connection);
     this.messageSender = opts.messageSender;
     if (opts.metrics) {
       this.registerMetrics(opts.metrics);
@@ -148,10 +183,17 @@ export class ChannelManager implements ChannelManagementAPI {
     this.fundingStrategy = opts.fundingStrategy ?? 'Fake';
     this.useLedger = opts.useLedger ?? false;
     this.syncOpeningChannelsPollIntervalMS = opts.syncOpeningChannelsPollIntervalMS || 2500;
+    this.syncOpeningChannelsMaxAttempts = opts.syncOpeningChannelsMaxAttempts ?? 20;
     this.ensureAllocationsConcurrency = opts.ensureAllocationsConcurrency;
     this.maxCapacity = BigNumber.from(
       BN.div(this.fundsPerAllocation, this.paymentChannelFundingAmount)
     ).toNumber();
+
+    const {onChainChallengeDuration: onChainFinalizationTime} = opts;
+    this.challengeDurations = {
+      ledgerChannel: onChainFinalizationTime?.ledgerChannel || DEFAULT_LEDGER_CHALLENGE_TIMEOUT,
+      paymentChannel: onChainFinalizationTime?.paymentChannel || DEFAULT_PAYMENT_CHALLENGE_TIMEOUT
+    };
   }
   private maxCapacity: number;
 
@@ -167,12 +209,9 @@ export class ChannelManager implements ChannelManagementAPI {
         throw err;
       });
 
-    this.logger.info('Database schema creation for payment channels cache');
-    await knex.raw('CREATE SCHEMA IF NOT EXISTS payment_manager');
-
     this.logger.info('Database migrations about to run for payment channels cache');
     try {
-      await knex.migrate.latest();
+      await this.cache.initialize();
     } catch (err) {
       this.logger.error('Error migrating', {err, config: this.wallet.walletConfig});
     }
@@ -188,9 +227,9 @@ export class ChannelManager implements ChannelManagementAPI {
   }
 
   async truncateDB(): Promise<void> {
+    this.logger.info('truncating DB');
     await this.wallet.dbAdmin().truncateDB();
-    await knex.raw(`TRUNCATE TABLE payment_manager.payment_channels CASCADE;`);
-    await knex.raw(`TRUNCATE TABLE payment_manager.ledger_channels CASCADE;`);
+    await this.cache.clearCache();
   }
 
   // makes sure we have channels for the provided allocations
@@ -210,8 +249,12 @@ export class ChannelManager implements ChannelManagementAPI {
     return this.cache.activeAllocations(allocationIds);
   }
 
-  public async syncChannels(stalledFor: number, limit?: number): Promise<string[]> {
-    const stalledChannels = await this.cache.stalledChannels(stalledFor, limit);
+  public async syncChannels(stalledFor: number, opts?: SyncChannelOpts): Promise<string[]> {
+    const syncChannelOpts = {
+      limit: opts?.limit,
+      contextIds: opts?.allocationIds
+    };
+    const stalledChannels = await this.cache.stalledChannels(stalledFor, syncChannelOpts);
     if (stalledChannels.length === 0) {
       return [];
     }
@@ -237,16 +280,28 @@ export class ChannelManager implements ChannelManagementAPI {
       async (messages) =>
         pMap(
           messages,
-          async (message) => {
+          async ({outbox: [{params}], channelResult}) => {
             try {
-              const {recipient, data} = this.wallet.mergeMessages([message]).outbox[0].params;
+              const {recipient, data} = params;
 
-              const response = await this.messageSender(recipient, data);
+              const response = await this.messageSender(recipient, data).catch((err) =>
+                this.logger.warn('Failed channel syncing handshake', {recipient, err})
+              );
 
-              const {channelResults} = await this.wallet.pushMessage(response);
+              if (!response) return;
+
+              const {channelResults, outbox} = await this.wallet.pushMessage(response);
+
+              if (outbox.length) {
+                await this.exchangeMessagesUntilOutboxIsEmpty(outbox[0]).then((results) =>
+                  this.insertActiveChannels(results)
+                );
+              }
 
               await pMap(
-                channelResults.filter((channelResult) => channelResult.turnNum % 2 === 1),
+                channelResults.filter(
+                  (channelResult) => channelResult.turnNum % 2 === 1 && channelResult.turnNum >= 3
+                ),
                 async (channelResult) => await this.cache.submitReceipt(channelResult)
               );
 
@@ -254,7 +309,7 @@ export class ChannelManager implements ChannelManagementAPI {
             } catch (err) {
               this.logger.error('Failed to sync channels with indexer', {err});
 
-              const allocationId = extractAllocationId(message.channelResult);
+              const allocationId = extractAllocationId(channelResult);
               await this.cache.retireChannels(allocationId);
 
               return [];
@@ -265,7 +320,7 @@ export class ChannelManager implements ChannelManagementAPI {
       {concurrency: 10}
     );
 
-    const resumedChannels = _.flatMapDeep(results.filter(notUndefined));
+    const resumedChannels = _.compact(_.flatMapDeep(results));
 
     this.channelInsights.post(
       Insights.channelEvent('ChannelsSynced', resumedChannels.map(extractSnapshot))
@@ -300,41 +355,47 @@ export class ChannelManager implements ChannelManagementAPI {
     if (this.useLedger) await this.closeLedgersForAllocations(allocationIds);
   }
 
+  // can be used to ensure maximum concurrency of API calls e.g., syncAllocations
+  private lock = new AsyncLock();
+
   // makes sure we have channels for the provided allocations, and close any other channels
   public async syncAllocations(requests: EnsureAllocationRequest[]): Promise<void> {
-    const channelRequests = requests.map(
-      extractCapacity(await this.cache.activeAllocations(), this.maxCapacity)
-    );
-    this.logger.debug('Syncing allocations', {
-      requests: _.map(requests, (request) => ({...request, allocation: request.allocation.id})),
-      channelRequests
+    await this.lock.acquire('syncAllocations', async () => {
+      const channelRequests = requests.map(
+        extractCapacity(await this.cache.activeAllocations(), this.maxCapacity)
+      );
+      this.logger.debug('Syncing allocations', {
+        requests: _.map(requests, (request) => ({...request, allocation: request.allocation.id})),
+        channelRequests
+      });
+
+      const activeAllocations = await this.cache.activeAllocations();
+      const allocationsWeHave = Object.keys(activeAllocations);
+      const allocationsWeNeed = requests.map(({allocation}) => allocation.id as string);
+      const allocationsToClose = allocationsWeHave.filter((id) => !allocationsWeNeed.includes(id));
+
+      await Promise.all([
+        this.ensureAllocations(_.uniq(requests)),
+        this.removeAllocations(_.uniq(allocationsToClose))
+      ]);
     });
-
-    const activeAllocations = await this.cache.activeAllocations();
-    const allocationsWeHave = Object.keys(activeAllocations);
-    const allocationsWeNeed = requests.map(({allocation}) => allocation.id as string);
-    const allocationsToClose = allocationsWeHave.filter((id) => !allocationsWeNeed.includes(id));
-
-    await Promise.all([
-      this.ensureAllocations(_.uniq(requests)),
-      this.removeAllocations(_.uniq(allocationsToClose))
-    ]);
   }
 
   private async closeLedgersForAllocations(allocationIds: string[]): Promise<void> {
     this.logger.info('Removing allocations and withdrawing unspent funds', {allocationIds});
 
-    const channelIds = (
-      await pMap(allocationIds, (allocationId) => this.cache.getLedgerChannel(allocationId))
+    const channelIds = _.flatten(
+      await pMap(allocationIds, (allocationId) => this.cache.getLedgerChannels(allocationId))
     ).filter(notUndefined);
 
     if (channelIds.length > 0) {
       this.logger.debug('Closing ledger channels', {channelIds});
 
       const {outbox} = await this.wallet.closeChannels(channelIds);
-      await this.cache.removeLedgerChannels(channelIds);
 
-      await pMap(outbox, ({params: {recipient, data}}) => this.messageSender(recipient, data));
+      await pMap(outbox, (msg) => this.exchangeMessagesUntilOutboxIsEmpty(msg));
+
+      await this.cache.removeLedgerChannels(channelIds);
 
       this.channelInsights.post({type: 'ChannelsClosed', channelIds});
       this.logger.debug('Closed ledger channels', {channelIds});
@@ -352,50 +413,73 @@ export class ChannelManager implements ChannelManagementAPI {
     };
   }
 
-  private async sendMessages(outbox: Outgoing[]): Promise<void> {
-    await Promise.all(outbox.map(async (item) => this.sendMessage(item.params)));
+  /**
+   * Sends a message and pushes any response into the wallet and repeats until either
+   * there is no longer a response or no longer anything left to send. Returns the
+   * channel results from the last pushMessage call.
+   */
+  private async exchangeMessagesUntilOutboxIsEmpty(message: Outgoing): Promise<ChannelResult[]> {
+    let outbox: Outgoing[] = [message];
+    let channelResults: ChannelResult[] = [];
+
+    while (outbox.length > 0) {
+      if (outbox.length > 1) {
+        /**
+         * Sanity-check:
+         *  Since the initial `message` has a since recipient, wallet behaviour implies that
+         *  every response received back and any future pushMessage output also has just
+         *  one recipient. Messages have unlimited size, too, and so each item in the outbox
+         *  array is for a unique external recipient in general.
+         */
+        const error = 'Unreachable: exchangeMessagesUntilOutboxIsEmpty had > 1 outbox item';
+        this.logger.error(error, {outbox});
+        throw new Error(error);
+      }
+
+      const {
+        params: {recipient, data}
+      } = outbox.pop() as Outgoing;
+
+      this.logger.trace(`Sending to indexer`, {toSend: summariseResponse(data)});
+
+      const response = await this.messageSender(recipient, data).catch(
+        // We don't have control over the message sender, and should therefore not
+        // expect it to succeed. But, there's no good action to take right now, in
+        // the presence of a caught error, so we suppress the error.
+        (err) => this.logger.error('Unable to send message', {err, recipient, data})
+      );
+
+      if (response) {
+        this.logger.trace('Received indexer response', summariseResponse(response));
+        ({channelResults, outbox} = await this.wallet.pushMessage(response));
+      }
+    }
+
+    return channelResults;
   }
 
-  private async sendMessage({recipient, data}: Outgoing['params']): Promise<void> {
-    const response = await this.messageSender(recipient, data).catch(() => {
-      // We don't have control over the message sender, and should therefore not
-      // expect it to succeed.
-      // But, there's no good action to take right now, in the presence of a caught
-      // error
+  private async insertActiveChannels(channelResults: ChannelResult[]): Promise<void> {
+    const active = _.filter(channelResults, (channel) => {
+      if (isLedgerChannel(channel)) return false;
+
+      return (
+        channel.status === 'running' ||
+        channel.status === 'proposed' ||
+        channel.status === 'funding' ||
+        channel.status === 'opening'
+      );
     });
-    if (response) await this.handleResponse(response);
-  }
 
-  private async handleResponse(response: unknown) {
-    this.logger.trace('Received indexer response', summariseResponse(response));
+    if (active.length === 0) return;
 
-    const {channelResults, outbox: newOutbox} = await this.wallet.pushMessage(response);
-
-    if (newOutbox.length > 0)
-      this.logger.trace(`Sending back to indexer`, {
-        toSend: summariseResponse(newOutbox[0].params.data)
-      });
-
-    await this.sendMessages(newOutbox);
-
-    await this.insertReadyChannels(channelResults);
-  }
-
-  private async insertReadyChannels(channelResults: ChannelResult[]): Promise<void> {
-    const readyChannels = _.filter(
-      channelResults,
-      (channel) => channel.status === 'running' && !isLedgerChannel(channel)
-    );
-
-    if (readyChannels.length === 0) return;
-
-    const grouped = _.groupBy(readyChannels, extractAllocationId);
+    const grouped = _.groupBy(active, extractAllocationId);
 
     await Promise.all(
       _.map(grouped, async (channels, allocationId) => {
         await this.cache.insertChannels(allocationId, channels);
+        const ready = channels.filter((c) => c.status === 'running');
         this.channelInsights.post(
-          Insights.channelEvent('ChannelsReady', channels.map(extractSnapshot))
+          Insights.channelEvent('ChannelsReady', ready.map(extractSnapshot))
         );
       })
     );
@@ -406,28 +490,36 @@ export class ChannelManager implements ChannelManagementAPI {
       outbox,
       channelResult: {status}
     } = await this.wallet.syncChannel({channelId});
+
     const ledgerRunning = status === 'running';
-    if (!ledgerRunning) await this.sendMessages(outbox);
+
+    if (!ledgerRunning && outbox.length === 1)
+      await this.exchangeMessagesUntilOutboxIsEmpty(outbox[0]);
+
     return ledgerRunning;
   }
 
-  private async createLedgerForAllocation(allocation: Allocation) {
-    this.logger.info(`Creating a ledger channel for allocation`, {
-      allocation: allocation.id
-    });
+  private async createLedgerForAllocation(allocation: Allocation): Promise<ChannelResult> {
+    const {id: allocationId} = allocation;
+
+    this.logger.info(`Creating a ledger channel for allocation`, {allocationId});
 
     const participant = await this.participant();
     const {destination} = participant;
 
-    const {outbox, channelResult} = await this.wallet.createLedgerChannel(
+    const {
+      outbox: [newLedgerMessage],
+      channelResult
+    } = await this.wallet.createLedgerChannel(
       {
         participants: [participant, allocationToParticipant(allocation)],
+        challengeDuration: this.challengeDurations.ledgerChannel,
         allocations: [
           {
             assetHolderAddress: this.contracts.assetHolder.address,
             allocationItems: [
               {amount: this.fundsPerAllocation, destination},
-              {amount: BN.from(0), destination: makeDestination(allocation.id)}
+              {amount: BN.from(0), destination: makeDestination(allocationId)}
             ]
           }
         ]
@@ -435,14 +527,13 @@ export class ChannelManager implements ChannelManagementAPI {
       this.fundingStrategy
     );
 
-    await this.cache.insertLedgerChannel(allocation.id, channelResult.channelId);
+    const {channelId, allocations} = channelResult;
 
-    this.logger.info(`Created ledger channel for allocation`, {
-      allocation: allocation.id,
-      channelId: channelResult.channelId
-    });
+    await this.cache.insertLedgerChannel(allocationId, channelId, allocations);
 
-    await this.sendMessages(outbox);
+    this.logger.info(`Created ledger channel for allocation`, {channelId, allocationId});
+
+    await this.exchangeMessagesUntilOutboxIsEmpty(newLedgerMessage);
 
     return channelResult;
   }
@@ -456,19 +547,14 @@ export class ChannelManager implements ChannelManagementAPI {
     //
     // Below, the channel manager polls the receipt manager with the latest channel state until
     // the receipt manager replies with postfund2
-    let syncSuccessful = false;
-    let numAttempts = 0;
-
-    while (!syncSuccessful && numAttempts++ < 20) {
-      this.logger.info(`Polling receiver until ledger is funded`, {channelId, numAttempts});
-      syncSuccessful = await this.syncOpeningLedgerChannel(channelId);
+    for (let i = 0; i < this.syncOpeningChannelsMaxAttempts; i++) {
+      this.logger.info(`Polling receiver until ledger is funded`, {channelId, numAttempts: i});
+      if (await this.syncOpeningLedgerChannel(channelId)) return true;
       await delay(this.syncOpeningChannelsPollIntervalMS);
     }
 
-    if (!syncSuccessful)
-      this.logger.error(`Failed to receive countersigned ledger update.`, {channelId});
-
-    return syncSuccessful;
+    this.logger.error(`Failed to receive countersigned ledger update.`, {channelId});
+    return false;
   }
 
   private async getLedgerForAllocation(allocation: Allocation): Promise<ChannelResult | undefined> {
@@ -488,7 +574,35 @@ export class ChannelManager implements ChannelManagementAPI {
   }
 
   private async ensureAllocation({allocation, capacity}: ChannelRequest): Promise<void> {
+    /**
+     * Immediately sync ledger channel if one exists in case it is out of sync,
+     * before checking activeChannels. This ensures capacity is accurate and avoid
+     * erroneously creating more channels than are needed.
+     */
+    const ledger = await this.getLedgerForAllocation(allocation);
+    if (ledger) {
+      const {
+        outbox: [syncLedger]
+      } = await this.wallet.syncChannel({channelId: ledger.channelId});
+      const channelResults = await this.exchangeMessagesUntilOutboxIsEmpty(syncLedger);
+      await this.insertActiveChannels(channelResults);
+    }
+
     const channelIds = await this.cache.activeChannels(allocation.id);
+
+    if (BN.gt(capacity, this.maxCapacity)) {
+      this.logger.warn('Cannot ensureAllocation at requested capacity', {
+        maxCapacity: this.maxCapacity,
+        capacity,
+        requestedCapacity: capacity,
+        fundsPerAllocation: this.fundsPerAllocation,
+        paymentChannelFundingAmount: this.paymentChannelFundingAmount
+      });
+      capacity = Number(this.maxCapacity);
+    }
+
+    const needsSyncing = await this.cache.readyingChannels(allocation.id);
+    if (needsSyncing.length > 0) await this.syncChannels(0, {allocationIds: [allocation.id]});
 
     const channelsRequired = capacity - channelIds.length;
     if (channelsRequired <= 0) {
@@ -505,13 +619,13 @@ export class ChannelManager implements ChannelManagementAPI {
       toAddress(this.contracts.attestationApp.address),
       toAddress(this.contracts.disputeManager.address),
       this.wallet.walletConfig.networkConfiguration.chainNetworkID,
-      this.paymentChannelFundingAmount
+      this.paymentChannelFundingAmount,
+      this.challengeDurations.paymentChannel
     );
 
     if (this.useLedger) {
       const {channelId: ledgerChannelId, status} =
-        (await this.getLedgerForAllocation(allocation)) ||
-        (await this.createLedgerForAllocation(allocation));
+        ledger || (await this.createLedgerForAllocation(allocation));
 
       const isLedgerFunded =
         status === 'running' || (await this.pollReceiverUntilLedgerCountersigned(ledgerChannelId));
@@ -539,6 +653,7 @@ export class ChannelManager implements ChannelManagementAPI {
       const numChannels = channelsToCreate.length;
 
       const {channelResults, outbox} = await this.wallet.createChannels(startState, numChannels);
+      await this.insertActiveChannels(channelResults);
 
       this.channelInsights.post(
         Insights.channelEvent('ChannelsCreated', channelResults.map(extractSnapshot))
@@ -549,7 +664,10 @@ export class ChannelManager implements ChannelManagementAPI {
         channelIds: channelResults.map((c) => c.channelId)
       });
 
-      await this.sendMessages(outbox);
+      await pMap(outbox, async (msg) => {
+        const channelResults = await this.exchangeMessagesUntilOutboxIsEmpty(msg);
+        await this.insertActiveChannels(channelResults);
+      });
     });
   }
 
@@ -568,7 +686,7 @@ export class ChannelManager implements ChannelManagementAPI {
               const {outbox} = await this.wallet.closeChannels(channelIds);
               this.channelInsights.post({type: 'ChannelsClosed', channelIds});
               await this.cache.removeChannels(channelIds);
-              await this.sendMessages(outbox);
+              await pMap(outbox, (msg) => this.exchangeMessagesUntilOutboxIsEmpty(msg));
             }
           },
           {concurrency: 6}
@@ -617,7 +735,7 @@ export class ChannelManager implements ChannelManagementAPI {
     await this.wallet.destroy();
 
     this.logger.debug('closing postgres cache connection');
-    await destroy();
+    await this.cache.destroy();
   }
 
   public async _shutdown(): Promise<void> {

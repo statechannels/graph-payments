@@ -1,11 +1,11 @@
 {
   "name": "@graphprotocol/receipts",
   "version": "0.0.1",
-  "description": "Graph Network State Channel Receipt Manager",
+  "description": "State Channel Receipt Manager",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
-  "repository": "https://github.com/statechannels/graph-payments",
-  "author": "State Channels",
+  "repository": "https://github.com/graphprotocol/indexer",
+  "author": "Graph Protocol",
   "private": false,
   "scripts": {
     "lint:check": "eslint . --ext .ts --cache",
@@ -15,15 +15,15 @@
     "test:watch": "yarn test --watch"
   },
   "dependencies": {
-    "@graphprotocol/common-ts": "1.0.1",
+    "@graphprotocol/common-ts": "0.4.0",
     "@graphprotocol/statechannels-contracts": "0.0.1",
-    "@statechannels/client-api-schema": "0.4.9",
-    "@statechannels/server-wallet": "1.13.1",
+    "@statechannels/client-api-schema": "0.7.0",
+    "@statechannels/server-wallet": "1.18.0",
+    "@statechannels/wallet-core": "0.10.0",
     "ethers": "^5.0.9",
     "lodash": "^4.17.20"
   },
   "devDependencies": {
-    "@statechannels/devtools": "0.5.0",
     "@types/eslint": "^7.2.2",
     "@types/eslint-plugin-prettier": "3.1.0",
     "@types/lodash": "^4.14.161",

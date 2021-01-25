@@ -1,6 +1,7 @@
 import {Payload as WirePayload} from '@statechannels/wire-format';
 import {ChannelResult, ChannelStatus} from '@statechannels/client-api-schema';
-import {BigNumber, constants} from 'ethers';
+import {BN, NULL_APP_DATA} from '@statechannels/wallet-core';
+import {constants} from 'ethers';
 
 type PayloadSummary = {
   states?: {channel: string; nonce: number; turnNum: number}[];
@@ -50,21 +51,16 @@ function extractBalances(channelResult: ChannelResult) {
     );
   }
   const allocation = allocations[0];
-  if (!isLedgerChannel(channelResult) && allocation.allocationItems.length !== 2) {
-    throw new Error(
-      `Payment channels should have an outcom with exactly two allocation items.
-      Found ${allocation.allocationItems.length}.`
-    );
-  }
-  const [gatewayItem, indexerItem] = allocation.allocationItems;
+
+  const [gatewayItem, ...indexerItems] = allocation.allocationItems;
   return {
-    gatewayBal: BigNumber.from(gatewayItem.amount).toHexString(),
-    indexerBal: BigNumber.from(indexerItem?.amount ?? 0).toHexString()
+    gatewayBal: BN.from(gatewayItem.amount),
+    indexerBal: indexerItems.map((i) => i.amount).reduce(BN.add, BN.from(0))
   };
 }
 
 export function isLedgerChannel(
   channel: Pick<ChannelResult, 'appData' | 'appDefinition'>
 ): boolean {
-  return channel.appDefinition === constants.AddressZero && channel.appData === '0x00';
+  return channel.appDefinition === constants.AddressZero && channel.appData === NULL_APP_DATA;
 }

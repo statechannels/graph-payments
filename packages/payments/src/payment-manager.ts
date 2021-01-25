@@ -6,7 +6,6 @@ import {Wallet as ChannelWallet} from '@statechannels/server-wallet';
 
 import {ConditionalPayment} from './query-engine-types';
 import {ChannelQueryResponse} from './types';
-import {MemoryCache} from './channel-cache';
 import * as Insights from './insights';
 import {
   constructPaymentUpdate,
@@ -18,7 +17,8 @@ import {
 import {CacheUserAPI} from './channel-cache/types';
 import {Evt} from 'evt';
 import {PaymentManagerInsightEvent} from './insights';
-import {IncomingServerWalletConfig as WalletConfig} from '@statechannels/server-wallet/lib/src/config';
+import {IncomingServerWalletConfig as WalletConfig} from '@statechannels/server-wallet';
+import {createPostgresCache} from './channel-cache';
 
 export interface PaymentManagerOptions {
   logger: Logger;
@@ -28,7 +28,7 @@ export interface PaymentManagerOptions {
 }
 
 export type PaymentManagementAPI = {
-  createPayment(allocationId: string, payment: ConditionalPayment): Promise<unknown>;
+  createPayment(payment: ConditionalPayment): Promise<unknown>;
   submitReceipt(payload: unknown): Promise<ChannelQueryResponse>;
 
   paymentInsights: Evt<PaymentManagerInsightEvent>;
@@ -54,14 +54,17 @@ export class PaymentManager implements PaymentManagementAPI {
   constructor(opts: PaymentManagerOptions) {
     this.logger = opts.logger.child({component: 'ChannelPaymentManager'});
     this.wallet = ChannelWallet.create(opts.walletConfig);
-    this.cache = opts.cache || new MemoryCache(this.logger);
+    this.cache =
+      opts.cache ?? createPostgresCache(opts.walletConfig.databaseConfiguration.connection);
     if (opts.metrics) {
       this.metrics = this.registerMetrics(opts.metrics);
       this.addMetricsTimers();
     }
   }
 
-  public async createPayment(allocationId: string, payment: ConditionalPayment): Promise<unknown> {
+  public async createPayment(payment: ConditionalPayment): Promise<unknown> {
+    const {allocationId} = payment;
+
     this.logger.debug(`Creating payment`, {allocationId});
     // find a channel from the cache
 
@@ -111,7 +114,9 @@ export class PaymentManager implements PaymentManagementAPI {
       })
       .catch((err) => {
         this.paymentInsights.post({type: 'PaymentFailed', allocation: allocationId, err});
-        throw err;
+        if (err.message === 'No free channels found')
+          throw new PaymentManagerError(Errors.noFreeChannels, allocationId);
+        else throw err;
       });
   }
 
@@ -162,11 +167,11 @@ export class PaymentManager implements PaymentManagementAPI {
 
   private addMetricsTimers(): void {
     const _createPayment = this.createPayment.bind(this);
-    this.createPayment = (allocationId: string, payment: ConditionalPayment) => {
+    this.createPayment = (payment: ConditionalPayment) => {
       return timed(
         this.metrics?.createPaymentDuration,
-        {allocation: allocationId},
-        _createPayment(allocationId, payment)
+        {allocation: payment.allocationId},
+        _createPayment(payment)
       );
     };
     const _submitReceipt = this.submitReceipt.bind(this);
@@ -210,4 +215,13 @@ interface PaymentManagerMetrics {
   createPaymentFailure: Counter<string>;
   createPaymentDuration: Histogram<string>;
   submitReceiptDuration: Histogram<string>;
+}
+
+export enum Errors {
+  noFreeChannels = 'No free channels found'
+}
+export class PaymentManagerError extends Error {
+  constructor(reason: Errors, public readonly allocationId: string) {
+    super(reason);
+  }
 }

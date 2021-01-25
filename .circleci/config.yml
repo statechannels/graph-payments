@@ -5,10 +5,7 @@ orbs:
 defaults: &defaults
   environment:
     POSTGRES_USER: postgres
-    SERVER_DB_USER: postgres
     POSTGRES_PASSWORD: ''
-    PAYMENT_MANAGER_CONNECTION: postgresql://postgres@localhost/payer
-    SKIP_EVM_VALIDATION: 'true'
 
 save_dep: &save_dep
   save_cache:
@@ -54,9 +51,7 @@ commands:
       - run:
           name: create schema
           path: packages/payments
-          environment:
-            PAYMENT_MANAGER_CONNECTION: postgresql://postgres@localhost/<<parameters.db>>
-          command: yarn db:create_schema
+          command: yarn db:create_schema  postgresql://postgres@localhost/<<parameters.db>>
 jobs:
   profile:
     docker:
@@ -115,10 +110,11 @@ jobs:
           at: ~/project
       - install_postgresql_client
       - create_db:
-          db: payer
+          db: cache_test
       - create_db:
-          db: receipt_manager
-
+          db: payment_manager_test
+      - create_db:
+          db: receipt_manager_test
       - run:
           name: payment manager tests
           path: packages/payments
@@ -148,15 +144,15 @@ jobs:
       - create_db:
           db: receipt
       - run:
-          name: 'E2E tests (no ledger, no chain)'
+          name: 'E2E tests (no chain, with ledger)'
+          path: 'packages/e2e-testing'
+          command: 'USE_LEDGER=true yarn test:e2e'
+      - run:
+          name: 'E2E tests (no chain)'
           path: 'packages/e2e-testing'
           command: 'yarn test:e2e'
-      - run:
-          name: 'E2E tests (with ledger, with chain)'
-          path: 'packages/e2e-testing'
-          command: 'USE_LEDGER=true yarn test:e2e:chain'
       - store_artifacts:
-          path: /tmp/e2e-test-with-ledger-with-chain.log
+          path: /tmp/e2e-test-without-ledger-without-chain.log
       - store_artifacts:
           path: /tmp/e2e-test-without-ledger-without-chain.log
 
