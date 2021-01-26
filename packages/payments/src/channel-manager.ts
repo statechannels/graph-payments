@@ -4,7 +4,7 @@ import pMap from 'p-map';
 import {Logger, Metrics, NetworkContracts} from '@graphprotocol/common-ts';
 
 import {BN, makeDestination, Uint256} from '@statechannels/wallet-core';
-import {Outgoing, Wallet as ChannelWallet} from '@statechannels/server-wallet';
+import {DBAdmin, Outgoing, Wallet as ChannelWallet} from '@statechannels/server-wallet';
 import {ChannelResult, Participant} from '@statechannels/client-api-schema';
 import {IncomingServerWalletConfig as WalletConfig} from '@statechannels/server-wallet';
 
@@ -201,13 +201,10 @@ export class ChannelManager implements ChannelManagementAPI {
     this.logger.info('Database migrations starting for for wallet and cache');
 
     this.logger.info('Database migrations started for state channels wallet');
-    await this.wallet
-      .dbAdmin()
-      .migrateDB()
-      .catch((err) => {
-        this.logger.error('Error migrating ', {err});
-        throw err;
-      });
+    await DBAdmin.migrateDatabase(this.wallet.walletConfig).catch((err) => {
+      this.logger.error('Error migrating ', {err});
+      throw err;
+    });
 
     this.logger.info('Database migrations about to run for payment channels cache');
     try {
@@ -228,7 +225,7 @@ export class ChannelManager implements ChannelManagementAPI {
 
   async truncateDB(): Promise<void> {
     this.logger.info('truncating DB');
-    await this.wallet.dbAdmin().truncateDB();
+    await DBAdmin.truncateDatabase(this.wallet.walletConfig);
     await this.cache.clearCache();
   }
 
