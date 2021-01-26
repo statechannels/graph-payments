@@ -28,13 +28,21 @@ class RMError extends Error {
 }
 export class ReceiptManager implements ReceiptManagerInterface {
   private wallet: Wallet;
+  async create(
+    logger: Logger,
+    privateKey: string,
+    contracts: NetworkContracts,
+    walletConfig: WalletConfig
+  ): Promise<ReceiptManager> {
+    return new ReceiptManager(logger, privateKey, contracts, await Wallet.create(walletConfig));
+  }
   constructor(
     private logger: Logger,
     public privateKey: string,
     private readonly contracts: NetworkContracts,
-    walletConfig: WalletConfig
+    wallet: Wallet
   ) {
-    this.wallet = Wallet.create(walletConfig);
+    this.wallet = wallet;
     this.wallet.warmUpThreads();
   }
 
