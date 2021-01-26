@@ -41,7 +41,7 @@ export class PaymentManager implements PaymentManagementAPI {
   protected cache: CacheUserAPI;
 
   static async create(opts: PaymentManagerOptions): Promise<PaymentManagementAPI> {
-    const paymentManager = new PaymentManager(opts);
+    const paymentManager = new PaymentManager(await ChannelWallet.create(opts.walletConfig), opts);
     await paymentManager.wallet.warmUpThreads();
     return paymentManager;
   }
@@ -51,9 +51,9 @@ export class PaymentManager implements PaymentManagementAPI {
   public paymentFailed = this.paymentInsights.pipe(Insights.isPaymentFailed);
   public receiptSubmitted = this.paymentInsights.pipe(Insights.isReceiptSubmitted);
 
-  constructor(opts: PaymentManagerOptions) {
+  constructor(wallet: ChannelWallet, opts: PaymentManagerOptions) {
     this.logger = opts.logger.child({component: 'ChannelPaymentManager'});
-    this.wallet = ChannelWallet.create(opts.walletConfig);
+    this.wallet = wallet;
     this.cache =
       opts.cache ?? createPostgresCache(opts.walletConfig.databaseConfiguration.connection);
     if (opts.metrics) {
