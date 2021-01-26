@@ -45,7 +45,7 @@ function stateFromPayload(payload: WireMessage['data'] | undefined, index = 0): 
 }
 
 beforeAll(async () => {
-  receiptManager = new ReceiptManager(
+  receiptManager = await ReceiptManager.create(
     logger,
     '0x95942b296854c97024ca3145abef8930bf329501b718c0f66d57dba596ff1318',
     mockContracts,

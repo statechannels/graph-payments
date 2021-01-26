@@ -28,7 +28,7 @@ class RMError extends Error {
 }
 export class ReceiptManager implements ReceiptManagerInterface {
   private wallet: Wallet;
-  async create(
+  static async create(
     logger: Logger,
     privateKey: string,
     contracts: NetworkContracts,
