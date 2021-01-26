@@ -12,7 +12,6 @@ import {IncomingServerWalletConfig as WalletConfig} from '@statechannels/server-
 import {extractSnapshot, isLedgerChannel, summarisePayload} from './utils';
 
 interface ReceiptManagerInterface {
-  migrateWalletDB(): Promise<void>;
   inputStateChannelMessage(payload: unknown): Promise<void | unknown>;
   provideAttestation(
     payload: unknown,
@@ -46,6 +45,8 @@ export class ReceiptManager implements ReceiptManagerInterface {
     this.wallet.warmUpThreads();
   }
 
+  // TODO deprecate this method
+  // https://github.com/statechannels/statechannels/pull/3181
   async migrateWalletDB(): Promise<void> {
     this.logger.info('Migrate server-wallet database');
     await DBAdmin.migrateDatabase(this.wallet.walletConfig);
@@ -70,10 +71,14 @@ export class ReceiptManager implements ReceiptManagerInterface {
     this.logger.info('Successfully migrated server-wallet database');
   }
 
+  // TODO deprecate this method
+  // https://github.com/statechannels/statechannels/pull/3181
   async truncateDB(tables?: string[]): Promise<void> {
     return DBAdmin.truncateDatabase(this.wallet.walletConfig, tables);
   }
 
+  // TODO deprecate this method
+  // https://github.com/statechannels/statechannels/pull/3181
   async closeDBConnections(): Promise<void> {
     return this.wallet.destroy();
   }
