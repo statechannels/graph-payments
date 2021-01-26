@@ -123,6 +123,7 @@ export class ChannelManager implements ChannelManagementAPI {
   public channelsClosed = this.channelInsights.pipe(Insights.isChannelsClosed);
 
   static async create(opts: ChannelManagerOptions): Promise<ChannelManager> {
+    // TODO: tidy up DB migration code
     await DBAdmin.migrateDatabase(opts.walletConfig);
     const channelManager = new ChannelManager(await ChannelWallet.create(opts.walletConfig), opts);
 
