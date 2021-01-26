@@ -123,7 +123,7 @@ export class ChannelManager implements ChannelManagementAPI {
   public channelsClosed = this.channelInsights.pipe(Insights.isChannelsClosed);
 
   static async create(opts: ChannelManagerOptions): Promise<ChannelManager> {
-    const channelManager = new ChannelManager(opts);
+    const channelManager = new ChannelManager(await ChannelWallet.create(opts.walletConfig), opts);
 
     await channelManager.prepareDB();
     await channelManager.populateCache();
@@ -161,7 +161,8 @@ export class ChannelManager implements ChannelManagementAPI {
     );
   }
 
-  constructor(opts: ChannelManagerOptions) {
+  constructor(wallet: ChannelWallet, opts: ChannelManagerOptions) {
+    this.wallet = wallet;
     this.destinationAddress = opts.destinationAddress;
     this.fundsPerAllocation = BN.from(opts.fundsPerAllocation);
     this.paymentChannelFundingAmount = BN.from(opts.paymentChannelFundingAmount);
@@ -172,7 +173,6 @@ export class ChannelManager implements ChannelManagementAPI {
       );
 
     this.logger = opts.logger.child({component: 'ChannelPaymentManager'});
-    this.wallet = ChannelWallet.create(opts.walletConfig);
     this.cache =
       opts.cache ?? createPostgresCache(opts.walletConfig.databaseConfiguration.connection);
     this.messageSender = opts.messageSender;
