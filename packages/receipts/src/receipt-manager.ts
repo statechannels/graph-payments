@@ -1,5 +1,5 @@
 import {ChannelResult} from '@statechannels/client-api-schema';
-import {Wallet} from '@statechannels/server-wallet';
+import {DBAdmin, Wallet} from '@statechannels/server-wallet';
 import {Logger, NetworkContracts} from '@graphprotocol/common-ts';
 import {
   toAttestationProvided,
@@ -48,7 +48,7 @@ export class ReceiptManager implements ReceiptManagerInterface {
 
   async migrateWalletDB(): Promise<void> {
     this.logger.info('Migrate server-wallet database');
-    await this.wallet.dbAdmin().migrateDB();
+    await DBAdmin.migrateDatabase(this.wallet.walletConfig);
     // TODO: We should only be registering this when we're not using a actual chain
     await this.wallet.registerAppBytecode(
       this.contracts.attestationApp.address,
@@ -71,7 +71,7 @@ export class ReceiptManager implements ReceiptManagerInterface {
   }
 
   async truncateDB(tables?: string[]): Promise<void> {
-    this.wallet.dbAdmin().truncateDB(tables);
+    return DBAdmin.truncateDatabase(this.wallet.walletConfig, tables);
   }
 
   async closeDBConnections(): Promise<void> {
@@ -105,7 +105,7 @@ export class ReceiptManager implements ReceiptManagerInterface {
       await this.handleClosedChannels(closedChannels)
     ]);
 
-    const {outbox} = this.wallet.mergeMessages(updatedResults);
+    const {outbox} = Wallet.mergeOutputs(updatedResults);
     // TODO: We should filter out all messages except those for the specific recipient
     if (outbox.length == 1) {
       return outbox[0].params.data;
@@ -186,7 +186,7 @@ export class ReceiptManager implements ReceiptManagerInterface {
         })
       );
 
-      return this.wallet.mergeMessages(results);
+      return Wallet.mergeOutputs(results);
     } else if (notOurTurnChannels.length > 0) {
       this.logger.debug(`Ignoring running channels that aren't on our turn.`, {
         numChannels: notOurTurnChannels.length,
