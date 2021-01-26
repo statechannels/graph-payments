@@ -13,8 +13,10 @@ import {Argv, scriptName} from 'yargs';
 import throng from 'throng';
 import {createTestLogger, generateAttestations} from './utils';
 import {
+  DBAdmin,
   defaultTestConfig,
-  overwriteConfigWithDatabaseConnection
+  overwriteConfigWithDatabaseConnection,
+  Wallet
 } from '@statechannels/server-wallet';
 import {ETHERLIME_ACCOUNTS} from '@statechannels/devtools';
 import {constants} from 'ethers';
@@ -56,25 +58,30 @@ const commands = {
         }
       } as NetworkContracts;
 
+      const config = {
+        ...overwriteConfigWithDatabaseConnection(defaultTestConfig(), {
+          database: args.pgDatabase,
+          user: args.pgUsername,
+          host: 'localhost'
+        }),
+        chainServiceConfiguration: {
+          attachChainService: !!process.env.RPC_ENDPOINT,
+          provider: process.env.RPC_ENDPOINT,
+          pk: ETHERLIME_ACCOUNTS[1].privateKey
+        }
+      };
+      await DBAdmin.migrateDatabase(config);
+
+      const wallet = await Wallet.create(config);
       const receiptManager = new ReceiptManager(
         logger.child({module: 'ReceiptManager'}) as any,
         RECEIPT_PRIVATE_KEY,
         testContracts,
-        {
-          ...overwriteConfigWithDatabaseConnection(defaultTestConfig(), {
-            database: args.pgDatabase,
-            user: args.pgUsername,
-            host: 'localhost'
-          }),
-          chainServiceConfiguration: {
-            attachChainService: !!process.env.RPC_ENDPOINT,
-            provider: process.env.RPC_ENDPOINT,
-            pk: ETHERLIME_ACCOUNTS[1].privateKey
-          }
-        }
+        wallet
       );
 
       const attestations = await generateAttestations(args.numAllocations);
+
       await receiptManager.migrateWalletDB();
       const start = () => startApp(receiptManager, attestations, logger, args.port);
       args.cluster
