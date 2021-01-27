@@ -28,6 +28,7 @@ import {
   defaultTestConfig,
   overwriteConfigWithDatabaseConnection
 } from '@statechannels/server-wallet';
+import {DBAdmin} from '@statechannels/server-wallet';
 
 const LOG_FILE = '/tmp/receipt-manager-test.log';
 // const LOG_FILE = undefined // turn off logging
@@ -43,22 +44,25 @@ function stateFromPayload(payload: WireMessage['data'] | undefined, index = 0): 
   // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
   return (payload as Payload).signedStates![index];
 }
-
+const walletConfig = overwriteConfigWithDatabaseConnection(
+  defaultTestConfig(),
+  RECEIPT_MANAGER_CONNECTION
+);
 beforeAll(async () => {
-  receiptManager = new ReceiptManager(
+  await DBAdmin.migrateDatabase(walletConfig);
+  await DBAdmin.truncateDatabase(walletConfig);
+  receiptManager = await ReceiptManager.create(
     logger,
     '0x95942b296854c97024ca3145abef8930bf329501b718c0f66d57dba596ff1318',
     mockContracts,
-    overwriteConfigWithDatabaseConnection(defaultTestConfig(), RECEIPT_MANAGER_CONNECTION)
+    walletConfig
   );
-  await receiptManager.truncateDB();
-  await receiptManager.migrateWalletDB();
   LOG_FILE && fs.existsSync(LOG_FILE) && fs.truncateSync(LOG_FILE);
 });
 
 beforeEach(async () => {
   logger.info(`Truncating ${process.env.SERVER_DB_NAME}`);
-  await receiptManager.truncateDB();
+  await DBAdmin.truncateDatabase(walletConfig);
   indexerAddress = await receiptManager.signingAddress();
 });
 

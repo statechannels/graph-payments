@@ -4,7 +4,7 @@ import pMap from 'p-map';
 import {Logger, Metrics, NetworkContracts} from '@graphprotocol/common-ts';
 
 import {BN, makeDestination, Uint256} from '@statechannels/wallet-core';
-import {Outgoing, Wallet as ChannelWallet} from '@statechannels/server-wallet';
+import {DBAdmin, Outgoing, Wallet as ChannelWallet} from '@statechannels/server-wallet';
 import {ChannelResult, Participant} from '@statechannels/client-api-schema';
 import {IncomingServerWalletConfig as WalletConfig} from '@statechannels/server-wallet';
 
@@ -123,9 +123,17 @@ export class ChannelManager implements ChannelManagementAPI {
   public channelsClosed = this.channelInsights.pipe(Insights.isChannelsClosed);
 
   static async create(opts: ChannelManagerOptions): Promise<ChannelManager> {
-    const channelManager = new ChannelManager(opts);
+    await DBAdmin.migrateDatabase(opts.walletConfig);
 
-    await channelManager.prepareDB();
+    const channelManager = new ChannelManager(await ChannelWallet.create(opts.walletConfig), opts);
+    // TODO: We should only be registering this when we're not using a actual chain
+    opts.logger.info('Registering bytecode');
+    await channelManager.wallet.registerAppBytecode(
+      opts.contracts.attestationApp.address,
+      getAttestionAppByteCode()
+    );
+
+    await channelManager.cache.initialize();
     await channelManager.populateCache();
 
     return channelManager;
@@ -161,7 +169,8 @@ export class ChannelManager implements ChannelManagementAPI {
     );
   }
 
-  constructor(opts: ChannelManagerOptions) {
+  constructor(wallet: ChannelWallet, opts: ChannelManagerOptions) {
+    this.wallet = wallet;
     this.destinationAddress = opts.destinationAddress;
     this.fundsPerAllocation = BN.from(opts.fundsPerAllocation);
     this.paymentChannelFundingAmount = BN.from(opts.paymentChannelFundingAmount);
@@ -172,7 +181,6 @@ export class ChannelManager implements ChannelManagementAPI {
       );
 
     this.logger = opts.logger.child({component: 'ChannelPaymentManager'});
-    this.wallet = ChannelWallet.create(opts.walletConfig);
     this.cache =
       opts.cache ?? createPostgresCache(opts.walletConfig.databaseConfiguration.connection);
     this.messageSender = opts.messageSender;
@@ -197,38 +205,9 @@ export class ChannelManager implements ChannelManagementAPI {
   }
   private maxCapacity: number;
 
-  async prepareDB(): Promise<void> {
-    this.logger.info('Database migrations starting for for wallet and cache');
-
-    this.logger.info('Database migrations started for state channels wallet');
-    await this.wallet
-      .dbAdmin()
-      .migrateDB()
-      .catch((err) => {
-        this.logger.error('Error migrating ', {err});
-        throw err;
-      });
-
-    this.logger.info('Database migrations about to run for payment channels cache');
-    try {
-      await this.cache.initialize();
-    } catch (err) {
-      this.logger.error('Error migrating', {err, config: this.wallet.walletConfig});
-    }
-
-    // TODO: We should only be registering this when we're not using a actual chain
-    this.logger.info('Registering bytecode');
-    await this.wallet.registerAppBytecode(
-      this.contracts.attestationApp.address,
-      getAttestionAppByteCode()
-    );
-
-    this.logger.info('Database migrations successfully finished for wallet and cache');
-  }
-
   async truncateDB(): Promise<void> {
     this.logger.info('truncating DB');
-    await this.wallet.dbAdmin().truncateDB();
+    await DBAdmin.truncateDatabase(this.wallet.walletConfig);
     await this.cache.clearCache();
   }
 

@@ -1,8 +1,13 @@
+import {Wallet} from '@statechannels/server-wallet';
 import {PaymentManager, PaymentManagerOptions} from '../payment-manager';
 
 export class TestPaymentManager extends PaymentManager {
+  constructor(wallet: Wallet, opts: PaymentManagerOptions) {
+    super(wallet, opts);
+  }
+
   static async create(opts: PaymentManagerOptions): Promise<TestPaymentManager> {
-    const channelManager = new TestPaymentManager(opts);
+    const channelManager = new TestPaymentManager(await Wallet.create(opts.walletConfig), opts);
     return channelManager;
   }
 

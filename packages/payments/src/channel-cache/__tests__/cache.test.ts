@@ -180,7 +180,7 @@ const allocation1 = {
 function buildChannel(channelId: string, allocationId: Address, turnNum: number): ChannelResult {
   return {
     fundingStatus: 'Funded',
-    challengeStatus: 'No Challenge Detected',
+    adjudicatorStatus: 'Open',
     participants: [
       {
         participantId: 'gateway',

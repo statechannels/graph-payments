@@ -14,7 +14,11 @@ import {configureEnvVariables, ETHERLIME_ACCOUNTS} from '@statechannels/devtools
 
 import axios from 'axios';
 import _ from 'lodash';
-import {Wallet as ChannelWallet} from '@statechannels/server-wallet';
+import {
+  DBAdmin,
+  overwriteConfigWithDatabaseConnection,
+  Wallet as ChannelWallet
+} from '@statechannels/server-wallet';
 jest.setTimeout(60_000);
 
 const NUM_ALLOCATIONS = 2;
@@ -46,41 +50,36 @@ import {Contract} from 'ethers';
 import {NULL_APP_DATA} from '@statechannels/wallet-core';
 import {Logger} from '@graphprotocol/common-ts';
 let logger: Logger;
+const baseConfig = defaultTestConfig({
+  networkConfiguration: {
+    chainNetworkID: process.env.CHAIN_ID
+      ? parseInt(process.env.CHAIN_ID)
+      : defaultTestConfig().networkConfiguration.chainNetworkID
+  },
+  chainServiceConfiguration: {
+    attachChainService: useChain,
+    provider: process.env.RPC_ENDPOINT,
+    pk: ETHERLIME_ACCOUNTS[0].privateKey
+  }
+});
+const payerConfig = overwriteConfigWithDatabaseConnection(baseConfig, {
+  database: PAYER_SERVER_DB_NAME
+});
+const receiverConfig = overwriteConfigWithDatabaseConnection(baseConfig, {
+  database: RECEIPT_SERVER_DB_NAME
+});
 
-const paymentWallet = ChannelWallet.create(
-  defaultTestConfig({
-    databaseConfiguration: {connection: {database: PAYER_SERVER_DB_NAME}},
-    networkConfiguration: {
-      chainNetworkID: process.env.CHAIN_ID
-        ? parseInt(process.env.CHAIN_ID)
-        : defaultTestConfig().networkConfiguration.chainNetworkID
-    },
-    chainServiceConfiguration: {
-      attachChainService: useChain,
-      provider: process.env.RPC_ENDPOINT,
-      pk: ETHERLIME_ACCOUNTS[0].privateKey
-    }
-  })
-);
-
-const receiptwallet = ChannelWallet.create(
-  defaultTestConfig({
-    databaseConfiguration: {connection: {database: RECEIPT_SERVER_DB_NAME}},
-    networkConfiguration: {
-      chainNetworkID: process.env.CHAIN_ID
-        ? parseInt(process.env.CHAIN_ID)
-        : defaultTestConfig().networkConfiguration.chainNetworkID
-    },
-    chainServiceConfiguration: {
-      attachChainService: useChain,
-      provider: process.env.RPC_ENDPOINT,
-      pk: ETHERLIME_ACCOUNTS[0].privateKey
-    }
-  })
-);
+let paymentWallet: ChannelWallet;
+let receiptWallet: ChannelWallet;
+beforeAll(async () => {
+  await DBAdmin.migrateDatabase(payerConfig);
+  await DBAdmin.migrateDatabase(receiverConfig);
+  paymentWallet = await ChannelWallet.create(payerConfig);
+  receiptWallet = await ChannelWallet.create(receiverConfig);
+});
 
 const getChannels = async (database: 'receipt' | 'payment') => {
-  const wallet = database === 'receipt' ? receiptwallet : paymentWallet;
+  const wallet = database === 'receipt' ? receiptWallet : paymentWallet;
   // Filter out the ledger channels results
   return (await wallet.getChannels()).channelResults.filter((c) => c.appData !== NULL_APP_DATA);
 };
@@ -165,7 +164,7 @@ describe('Payment & Receipt Managers E2E', () => {
   afterAll(async () => {
     teardownContractMonitor();
     await paymentWallet.destroy();
-    await receiptwallet.destroy();
+    await receiptWallet.destroy();
   });
   test(`Can create and pay with ${NUM_ALLOCATIONS} allocations`, async () => {
     // Make 2 payments per allocation

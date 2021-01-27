@@ -49,21 +49,7 @@ const walletConfig = overwriteConfigWithDatabaseConnection(
   PAYMENT_MANAGER_TEST_DB_CONNECTION_STRING
 );
 
-const paymentWallet = ChannelWallet.create(
-  defaultTestConfig({
-    databaseConfiguration: {connection: {database: PAYMENT_MANAGER_TEST_DB_NAME}},
-    networkConfiguration: {
-      chainNetworkID: process.env.CHAIN_ID
-        ? parseInt(process.env.CHAIN_ID)
-        : defaultTestConfig().networkConfiguration.chainNetworkID
-    },
-    chainServiceConfiguration: {
-      attachChainService: false,
-      provider: process.env.RPC_ENDPOINT,
-      pk: '0x0000000000000000000000000000000000000000000000000000000000000000'
-    }
-  })
-);
+let paymentWallet: ChannelWallet;
 
 const cache = createPostgresCache(PAYMENT_MANAGER_TEST_DB_CONNECTION_STRING);
 const cmDefaultOpts: Pick<
@@ -86,6 +72,7 @@ const cmDefaultOpts: Pick<
 };
 
 type MessageSender = ChannelManagerOptions['messageSender'];
+
 async function dummyChannelManager(): Promise<ChannelManager> {
   const fakeIndexer = new FakeIndexer({logger, privateKey: RECEIPT_PRIVATE_KEY});
 
@@ -98,9 +85,23 @@ let dummyCM: ChannelManager;
 beforeAll(async (done) => {
   logger.info('starting test');
   dummyCM = await dummyChannelManager();
-  await dummyCM.prepareDB();
-  LOG_FILE && fs.existsSync(LOG_FILE) && fs.truncateSync(LOG_FILE);
 
+  LOG_FILE && fs.existsSync(LOG_FILE) && fs.truncateSync(LOG_FILE);
+  paymentWallet = await ChannelWallet.create(
+    defaultTestConfig({
+      databaseConfiguration: {connection: {database: PAYMENT_MANAGER_TEST_DB_NAME}},
+      networkConfiguration: {
+        chainNetworkID: process.env.CHAIN_ID
+          ? parseInt(process.env.CHAIN_ID)
+          : defaultTestConfig().networkConfiguration.chainNetworkID
+      },
+      chainServiceConfiguration: {
+        attachChainService: false,
+        provider: process.env.RPC_ENDPOINT,
+        pk: '0x0000000000000000000000000000000000000000000000000000000000000000'
+      }
+    })
+  );
   done();
 });
 

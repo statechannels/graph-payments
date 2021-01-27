@@ -56,26 +56,28 @@ const commands = {
         }
       } as NetworkContracts;
 
-      const receiptManager = new ReceiptManager(
+      const config = {
+        ...overwriteConfigWithDatabaseConnection(defaultTestConfig(), {
+          database: args.pgDatabase,
+          user: args.pgUsername,
+          host: 'localhost'
+        }),
+        chainServiceConfiguration: {
+          attachChainService: !!process.env.RPC_ENDPOINT,
+          provider: process.env.RPC_ENDPOINT,
+          pk: ETHERLIME_ACCOUNTS[1].privateKey
+        }
+      };
+
+      const receiptManager = await ReceiptManager.create(
         logger.child({module: 'ReceiptManager'}) as any,
         RECEIPT_PRIVATE_KEY,
         testContracts,
-        {
-          ...overwriteConfigWithDatabaseConnection(defaultTestConfig(), {
-            database: args.pgDatabase,
-            user: args.pgUsername,
-            host: 'localhost'
-          }),
-          chainServiceConfiguration: {
-            attachChainService: !!process.env.RPC_ENDPOINT,
-            provider: process.env.RPC_ENDPOINT,
-            pk: ETHERLIME_ACCOUNTS[1].privateKey
-          }
-        }
+        config
       );
 
       const attestations = await generateAttestations(args.numAllocations);
-      await receiptManager.migrateWalletDB();
+
       const start = () => startApp(receiptManager, attestations, logger, args.port);
       args.cluster
         ? throng({

@@ -1,5 +1,5 @@
 import {ChannelResult} from '@statechannels/client-api-schema';
-import {Wallet} from '@statechannels/server-wallet';
+import {DBAdmin, Wallet} from '@statechannels/server-wallet';
 import {Logger, NetworkContracts} from '@graphprotocol/common-ts';
 import {
   toAttestationProvided,
@@ -7,12 +7,12 @@ import {
   getAttestionAppByteCode
 } from '@graphprotocol/statechannels-contracts';
 import _ from 'lodash';
-import {constants, ethers} from 'ethers';
+import {constants} from 'ethers';
 import {IncomingServerWalletConfig as WalletConfig} from '@statechannels/server-wallet';
 import {extractSnapshot, isLedgerChannel, summarisePayload} from './utils';
+import {makePrivateKey} from '@statechannels/wallet-core';
 
 interface ReceiptManagerInterface {
-  migrateWalletDB(): Promise<void>;
   inputStateChannelMessage(payload: unknown): Promise<void | unknown>;
   provideAttestation(
     payload: unknown,
@@ -28,42 +28,29 @@ class RMError extends Error {
 }
 export class ReceiptManager implements ReceiptManagerInterface {
   private wallet: Wallet;
+  static async create(
+    logger: Logger,
+    privateKey: string,
+    contracts: NetworkContracts,
+    walletConfig: WalletConfig
+  ): Promise<ReceiptManager> {
+    logger.info('Migrate server-wallet database');
+    await DBAdmin.migrateDatabase(walletConfig);
+    logger.info('Successfully migrated server-wallet database');
+    const wallet = await Wallet.create(walletConfig);
+    await wallet.addSigningKey(makePrivateKey(privateKey));
+    await wallet.registerAppBytecode(contracts.attestationApp.address, getAttestionAppByteCode());
+
+    return new ReceiptManager(logger, privateKey, contracts, wallet);
+  }
   constructor(
     private logger: Logger,
     public privateKey: string,
     private readonly contracts: NetworkContracts,
-    walletConfig: WalletConfig
+    wallet: Wallet
   ) {
-    this.wallet = Wallet.create(walletConfig);
+    this.wallet = wallet;
     this.wallet.warmUpThreads();
-  }
-
-  async migrateWalletDB(): Promise<void> {
-    this.logger.info('Migrate server-wallet database');
-    await this.wallet.dbAdmin().migrateDB();
-    // TODO: We should only be registering this when we're not using a actual chain
-    await this.wallet.registerAppBytecode(
-      this.contracts.attestationApp.address,
-      getAttestionAppByteCode()
-    );
-
-    try {
-      const {address} = new ethers.Wallet(this.privateKey);
-      await this.wallet.knex.table('signing_wallets').insert({
-        private_key: this.privateKey,
-        address
-      });
-    } catch (err) {
-      if (err.constraint !== 'signing_wallets_private_key_unique') {
-        throw err;
-      }
-    }
-
-    this.logger.info('Successfully migrated server-wallet database');
-  }
-
-  async truncateDB(tables?: string[]): Promise<void> {
-    this.wallet.dbAdmin().truncateDB(tables);
   }
 
   async closeDBConnections(): Promise<void> {
@@ -97,7 +84,7 @@ export class ReceiptManager implements ReceiptManagerInterface {
       await this.handleClosedChannels(closedChannels)
     ]);
 
-    const {outbox} = this.wallet.mergeMessages(updatedResults);
+    const {outbox} = Wallet.mergeOutputs(updatedResults);
     // TODO: We should filter out all messages except those for the specific recipient
     if (outbox.length == 1) {
       return outbox[0].params.data;
@@ -178,7 +165,7 @@ export class ReceiptManager implements ReceiptManagerInterface {
         })
       );
 
-      return this.wallet.mergeMessages(results);
+      return Wallet.mergeOutputs(results);
     } else if (notOurTurnChannels.length > 0) {
       this.logger.debug(`Ignoring running channels that aren't on our turn.`, {
         numChannels: notOurTurnChannels.length,

@@ -173,7 +173,6 @@ const createTasks = (logger: Logger) => ({
         }
       })
     });
-    await channelManager.prepareDB();
 
     const testAllocations = generateAllocations(numAllocations);
 
