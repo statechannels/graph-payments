@@ -73,16 +73,16 @@ const receiverConfig = defaultTestConfig({
   }
 });
 let paymentWallet: ChannelWallet;
-let receiptwallet: ChannelWallet;
+let receiptWallet: ChannelWallet;
 beforeAll(async () => {
   await DBAdmin.migrateDatabase(payerConfig);
   await DBAdmin.migrateDatabase(receiverConfig);
   paymentWallet = await ChannelWallet.create(payerConfig);
-  receiptwallet = await ChannelWallet.create(receiverConfig);
+  receiptWallet = await ChannelWallet.create(receiverConfig);
 });
 
 const getChannels = async (database: 'receipt' | 'payment') => {
-  const wallet = database === 'receipt' ? receiptwallet : paymentWallet;
+  const wallet = database === 'receipt' ? receiptWallet : paymentWallet;
   // Filter out the ledger channels results
   return (await wallet.getChannels()).channelResults.filter((c) => c.appData !== NULL_APP_DATA);
 };
@@ -167,7 +167,7 @@ describe('Payment & Receipt Managers E2E', () => {
   afterAll(async () => {
     teardownContractMonitor();
     await paymentWallet.destroy();
-    await receiptwallet.destroy();
+    await receiptWallet.destroy();
   });
   test(`Can create and pay with ${NUM_ALLOCATIONS} allocations`, async () => {
     // Make 2 payments per allocation
