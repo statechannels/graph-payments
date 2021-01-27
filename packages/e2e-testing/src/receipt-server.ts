@@ -15,8 +15,7 @@ import {createTestLogger, generateAttestations} from './utils';
 import {
   DBAdmin,
   defaultTestConfig,
-  overwriteConfigWithDatabaseConnection,
-  Wallet
+  overwriteConfigWithDatabaseConnection
 } from '@statechannels/server-wallet';
 import {ETHERLIME_ACCOUNTS} from '@statechannels/devtools';
 import {constants} from 'ethers';
@@ -72,17 +71,15 @@ const commands = {
       };
       await DBAdmin.migrateDatabase(config);
 
-      const wallet = await Wallet.create(config);
-      const receiptManager = new ReceiptManager(
+      const receiptManager = await ReceiptManager.create(
         logger.child({module: 'ReceiptManager'}) as any,
         RECEIPT_PRIVATE_KEY,
         testContracts,
-        wallet
+        config
       );
 
       const attestations = await generateAttestations(args.numAllocations);
 
-      await receiptManager.migrateWalletDB();
       const start = () => startApp(receiptManager, attestations, logger, args.port);
       args.cluster
         ? throng({

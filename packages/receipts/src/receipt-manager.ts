@@ -7,9 +7,10 @@ import {
   getAttestionAppByteCode
 } from '@graphprotocol/statechannels-contracts';
 import _ from 'lodash';
-import {constants, ethers} from 'ethers';
+import {constants} from 'ethers';
 import {IncomingServerWalletConfig as WalletConfig} from '@statechannels/server-wallet';
 import {extractSnapshot, isLedgerChannel, summarisePayload} from './utils';
+import {makePrivateKey} from '@statechannels/wallet-core';
 
 interface ReceiptManagerInterface {
   inputStateChannelMessage(payload: unknown): Promise<void | unknown>;
@@ -33,7 +34,14 @@ export class ReceiptManager implements ReceiptManagerInterface {
     contracts: NetworkContracts,
     walletConfig: WalletConfig
   ): Promise<ReceiptManager> {
-    return new ReceiptManager(logger, privateKey, contracts, await Wallet.create(walletConfig));
+    logger.info('Migrate server-wallet database');
+    await DBAdmin.migrateDatabase(walletConfig);
+    logger.info('Successfully migrated server-wallet database');
+    const wallet = await Wallet.create(walletConfig);
+    await wallet.addSigningKey(makePrivateKey(privateKey));
+    await wallet.registerAppBytecode(contracts.attestationApp.address, getAttestionAppByteCode());
+
+    return new ReceiptManager(logger, privateKey, contracts, wallet);
   }
   constructor(
     private logger: Logger,
@@ -43,32 +51,6 @@ export class ReceiptManager implements ReceiptManagerInterface {
   ) {
     this.wallet = wallet;
     this.wallet.warmUpThreads();
-  }
-
-  // TODO deprecate this method
-  // https://github.com/statechannels/statechannels/pull/3181
-  async migrateWalletDB(): Promise<void> {
-    this.logger.info('Migrate server-wallet database');
-    await DBAdmin.migrateDatabase(this.wallet.walletConfig);
-    // TODO: We should only be registering this when we're not using a actual chain
-    await this.wallet.registerAppBytecode(
-      this.contracts.attestationApp.address,
-      getAttestionAppByteCode()
-    );
-
-    try {
-      const {address} = new ethers.Wallet(this.privateKey);
-      await this.wallet.knex.table('signing_wallets').insert({
-        private_key: this.privateKey,
-        address
-      });
-    } catch (err) {
-      if (err.constraint !== 'signing_wallets_private_key_unique') {
-        throw err;
-      }
-    }
-
-    this.logger.info('Successfully migrated server-wallet database');
   }
 
   // TODO deprecate this method
