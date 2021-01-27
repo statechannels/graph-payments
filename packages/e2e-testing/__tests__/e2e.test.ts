@@ -14,7 +14,11 @@ import {configureEnvVariables, ETHERLIME_ACCOUNTS} from '@statechannels/devtools
 
 import axios from 'axios';
 import _ from 'lodash';
-import {DBAdmin, Wallet as ChannelWallet} from '@statechannels/server-wallet';
+import {
+  DBAdmin,
+  overwriteConfigWithDatabaseConnection,
+  Wallet as ChannelWallet
+} from '@statechannels/server-wallet';
 jest.setTimeout(60_000);
 
 const NUM_ALLOCATIONS = 2;
@@ -46,8 +50,7 @@ import {Contract} from 'ethers';
 import {NULL_APP_DATA} from '@statechannels/wallet-core';
 import {Logger} from '@graphprotocol/common-ts';
 let logger: Logger;
-const payerConfig = defaultTestConfig({
-  databaseConfiguration: {connection: {database: PAYER_SERVER_DB_NAME}},
+const baseConfig = defaultTestConfig({
   networkConfiguration: {
     chainNetworkID: process.env.CHAIN_ID
       ? parseInt(process.env.CHAIN_ID)
@@ -59,19 +62,13 @@ const payerConfig = defaultTestConfig({
     pk: ETHERLIME_ACCOUNTS[0].privateKey
   }
 });
-const receiverConfig = defaultTestConfig({
-  databaseConfiguration: {connection: {database: RECEIPT_SERVER_DB_NAME}},
-  networkConfiguration: {
-    chainNetworkID: process.env.CHAIN_ID
-      ? parseInt(process.env.CHAIN_ID)
-      : defaultTestConfig().networkConfiguration.chainNetworkID
-  },
-  chainServiceConfiguration: {
-    attachChainService: useChain,
-    provider: process.env.RPC_ENDPOINT,
-    pk: ETHERLIME_ACCOUNTS[0].privateKey
-  }
+const payerConfig = overwriteConfigWithDatabaseConnection(baseConfig, {
+  database: PAYER_SERVER_DB_NAME
 });
+const receiverConfig = overwriteConfigWithDatabaseConnection(baseConfig, {
+  database: RECEIPT_SERVER_DB_NAME
+});
+
 let paymentWallet: ChannelWallet;
 let receiptWallet: ChannelWallet;
 beforeAll(async () => {
