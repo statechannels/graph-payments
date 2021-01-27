@@ -123,11 +123,17 @@ export class ChannelManager implements ChannelManagementAPI {
   public channelsClosed = this.channelInsights.pipe(Insights.isChannelsClosed);
 
   static async create(opts: ChannelManagerOptions): Promise<ChannelManager> {
-    // TODO: tidy up DB migration code
     await DBAdmin.migrateDatabase(opts.walletConfig);
-    const channelManager = new ChannelManager(await ChannelWallet.create(opts.walletConfig), opts);
 
-    await channelManager.prepareDB();
+    const channelManager = new ChannelManager(await ChannelWallet.create(opts.walletConfig), opts);
+    // TODO: We should only be registering this when we're not using a actual chain
+    opts.logger.info('Registering bytecode');
+    await channelManager.wallet.registerAppBytecode(
+      opts.contracts.attestationApp.address,
+      getAttestionAppByteCode()
+    );
+
+    await channelManager.cache.initialize();
     await channelManager.populateCache();
 
     return channelManager;
@@ -198,32 +204,6 @@ export class ChannelManager implements ChannelManagementAPI {
     };
   }
   private maxCapacity: number;
-
-  async prepareDB(): Promise<void> {
-    this.logger.info('Database migrations starting for for wallet and cache');
-
-    this.logger.info('Database migrations started for state channels wallet');
-    await DBAdmin.migrateDatabase(this.wallet.walletConfig).catch((err) => {
-      this.logger.error('Error migrating ', {err});
-      throw err;
-    });
-
-    this.logger.info('Database migrations about to run for payment channels cache');
-    try {
-      await this.cache.initialize();
-    } catch (err) {
-      this.logger.error('Error migrating', {err, config: this.wallet.walletConfig});
-    }
-
-    // TODO: We should only be registering this when we're not using a actual chain
-    this.logger.info('Registering bytecode');
-    await this.wallet.registerAppBytecode(
-      this.contracts.attestationApp.address,
-      getAttestionAppByteCode()
-    );
-
-    this.logger.info('Database migrations successfully finished for wallet and cache');
-  }
 
   async truncateDB(): Promise<void> {
     this.logger.info('truncating DB');

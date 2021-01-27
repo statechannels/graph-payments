@@ -44,12 +44,11 @@ function stateFromPayload(payload: WireMessage['data'] | undefined, index = 0): 
   // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
   return (payload as Payload).signedStates![index];
 }
-
+const walletConfig = overwriteConfigWithDatabaseConnection(
+  defaultTestConfig(),
+  RECEIPT_MANAGER_CONNECTION
+);
 beforeAll(async () => {
-  const walletConfig = overwriteConfigWithDatabaseConnection(
-    defaultTestConfig(),
-    RECEIPT_MANAGER_CONNECTION
-  );
   await DBAdmin.migrateDatabase(walletConfig);
   await DBAdmin.truncateDatabase(walletConfig);
   receiptManager = await ReceiptManager.create(
@@ -63,7 +62,7 @@ beforeAll(async () => {
 
 beforeEach(async () => {
   logger.info(`Truncating ${process.env.SERVER_DB_NAME}`);
-  await receiptManager.truncateDB();
+  await DBAdmin.truncateDatabase(walletConfig);
   indexerAddress = await receiptManager.signingAddress();
 });
 

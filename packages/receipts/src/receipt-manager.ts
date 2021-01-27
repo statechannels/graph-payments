@@ -53,14 +53,6 @@ export class ReceiptManager implements ReceiptManagerInterface {
     this.wallet.warmUpThreads();
   }
 
-  // TODO deprecate this method
-  // https://github.com/statechannels/statechannels/pull/3181
-  async truncateDB(tables?: string[]): Promise<void> {
-    return DBAdmin.truncateDatabase(this.wallet.walletConfig, tables);
-  }
-
-  // TODO deprecate this method
-  // https://github.com/statechannels/statechannels/pull/3181
   async closeDBConnections(): Promise<void> {
     return this.wallet.destroy();
   }
