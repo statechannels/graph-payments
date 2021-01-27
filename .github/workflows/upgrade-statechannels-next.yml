@@ -6,7 +6,7 @@ on:
   workflow_dispatch: {}
 
 jobs:
-  publish-to-npm:
+  update-statechannels-packages-to-next:
     runs-on: ubuntu-latest
     steps:
       - name: Check out source code
@@ -28,6 +28,8 @@ jobs:
             ${{ runner.os }}-yarn-cache-v2-
 
       - name: yarn install
+        env:
+          SKIP_PREPARE: true # the upgrades may well prevent our packages compiling
         run: |
           yarn workspace @graphprotocol/payments upgrade @statechannels/server-wallet@next @statechannels/client-api-schema@next @statechannels/wallet-core@next -E
           yarn workspace @graphprotocol/receipts upgrade @statechannels/server-wallet@next @statechannels/client-api-schema@next @statechannels/wallet-core@next -E
@@ -46,3 +48,4 @@ jobs:
           branch: upgrade-statechannels-pkgs
           title: Upgrade @statechannels packages to @next tag
           body: This PR was created automatically by a github action.
+          commit-message: upgrade statechannels packages to next tag
