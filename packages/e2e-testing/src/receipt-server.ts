@@ -13,7 +13,6 @@ import {Argv, scriptName} from 'yargs';
 import throng from 'throng';
 import {createTestLogger, generateAttestations} from './utils';
 import {
-  DBAdmin,
   defaultTestConfig,
   overwriteConfigWithDatabaseConnection
 } from '@statechannels/server-wallet';
@@ -69,7 +68,6 @@ const commands = {
           pk: ETHERLIME_ACCOUNTS[1].privateKey
         }
       };
-      await DBAdmin.migrateDatabase(config);
 
       const receiptManager = await ReceiptManager.create(
         logger.child({module: 'ReceiptManager'}) as any,
