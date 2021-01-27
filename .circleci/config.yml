@@ -217,7 +217,6 @@ jobs:
       - run: git diff --exit-code
       - run: yarn lint:check
       - <<: *save_dep
-      - run: yarn test:ci
 
       - persist_to_workspace:
           root: ~/project
