@@ -1,3 +1,4 @@
+import {getAttestionAppByteCode} from '@graphprotocol/statechannels-contracts';
 import {DBAdmin, Wallet} from '@statechannels/server-wallet';
 import {ChannelManager, ChannelManagerOptions} from '../channel-manager';
 
@@ -14,8 +15,14 @@ export class TestChannelManager extends ChannelManager {
   }
   static async create(opts: ChannelManagerOptions): Promise<TestChannelManager> {
     await DBAdmin.migrateDatabase(opts.walletConfig);
-    const channelManager = new TestChannelManager(await Wallet.create(opts.walletConfig), opts);
-    await channelManager.prepareDB();
+    const wallet = await Wallet.create(opts.walletConfig);
+    await wallet.registerAppBytecode(
+      opts.contracts.attestationApp.address,
+      getAttestionAppByteCode()
+    );
+    const channelManager = new TestChannelManager(wallet, opts);
+
+    await channelManager.cache.initialize();
     await channelManager.populateCache();
 
     return channelManager;

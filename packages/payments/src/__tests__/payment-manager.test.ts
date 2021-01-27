@@ -85,7 +85,7 @@ let dummyCM: ChannelManager;
 beforeAll(async (done) => {
   logger.info('starting test');
   dummyCM = await dummyChannelManager();
-  await dummyCM.prepareDB();
+
   LOG_FILE && fs.existsSync(LOG_FILE) && fs.truncateSync(LOG_FILE);
   paymentWallet = await ChannelWallet.create(
     defaultTestConfig({
