@@ -14,7 +14,7 @@ import {configureEnvVariables, ETHERLIME_ACCOUNTS} from '@statechannels/devtools
 
 import axios from 'axios';
 import _ from 'lodash';
-import {Wallet as ChannelWallet} from '@statechannels/server-wallet';
+import {DBAdmin, Wallet as ChannelWallet} from '@statechannels/server-wallet';
 jest.setTimeout(60_000);
 
 const NUM_ALLOCATIONS = 2;
@@ -46,41 +46,39 @@ import {Contract} from 'ethers';
 import {NULL_APP_DATA} from '@statechannels/wallet-core';
 import {Logger} from '@graphprotocol/common-ts';
 let logger: Logger;
-
+const payerConfig = defaultTestConfig({
+  databaseConfiguration: {connection: {database: PAYER_SERVER_DB_NAME}},
+  networkConfiguration: {
+    chainNetworkID: process.env.CHAIN_ID
+      ? parseInt(process.env.CHAIN_ID)
+      : defaultTestConfig().networkConfiguration.chainNetworkID
+  },
+  chainServiceConfiguration: {
+    attachChainService: useChain,
+    provider: process.env.RPC_ENDPOINT,
+    pk: ETHERLIME_ACCOUNTS[0].privateKey
+  }
+});
+const receiverConfig = defaultTestConfig({
+  databaseConfiguration: {connection: {database: RECEIPT_SERVER_DB_NAME}},
+  networkConfiguration: {
+    chainNetworkID: process.env.CHAIN_ID
+      ? parseInt(process.env.CHAIN_ID)
+      : defaultTestConfig().networkConfiguration.chainNetworkID
+  },
+  chainServiceConfiguration: {
+    attachChainService: useChain,
+    provider: process.env.RPC_ENDPOINT,
+    pk: ETHERLIME_ACCOUNTS[0].privateKey
+  }
+});
 let paymentWallet: ChannelWallet;
 let receiptwallet: ChannelWallet;
 beforeAll(async () => {
-  paymentWallet = await ChannelWallet.create(
-    defaultTestConfig({
-      databaseConfiguration: {connection: {database: PAYER_SERVER_DB_NAME}},
-      networkConfiguration: {
-        chainNetworkID: process.env.CHAIN_ID
-          ? parseInt(process.env.CHAIN_ID)
-          : defaultTestConfig().networkConfiguration.chainNetworkID
-      },
-      chainServiceConfiguration: {
-        attachChainService: useChain,
-        provider: process.env.RPC_ENDPOINT,
-        pk: ETHERLIME_ACCOUNTS[0].privateKey
-      }
-    })
-  );
-
-  receiptwallet = await ChannelWallet.create(
-    defaultTestConfig({
-      databaseConfiguration: {connection: {database: RECEIPT_SERVER_DB_NAME}},
-      networkConfiguration: {
-        chainNetworkID: process.env.CHAIN_ID
-          ? parseInt(process.env.CHAIN_ID)
-          : defaultTestConfig().networkConfiguration.chainNetworkID
-      },
-      chainServiceConfiguration: {
-        attachChainService: useChain,
-        provider: process.env.RPC_ENDPOINT,
-        pk: ETHERLIME_ACCOUNTS[0].privateKey
-      }
-    })
-  );
+  await DBAdmin.migrateDatabase(payerConfig);
+  await DBAdmin.migrateDatabase(receiverConfig);
+  paymentWallet = await ChannelWallet.create(payerConfig);
+  receiptwallet = await ChannelWallet.create(receiverConfig);
 });
 
 const getChannels = async (database: 'receipt' | 'payment') => {
