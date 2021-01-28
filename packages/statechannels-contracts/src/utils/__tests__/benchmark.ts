@@ -1,5 +1,7 @@
 import benny from 'benny';
+
 import {abiDecoder, abiEncoder, pureJSDecoder, pureJSEncoder} from '../app-data';
+
 import {attestationProvided} from './fake-app-data';
 
 benny.suite(

@@ -1,4 +1,5 @@
 import {Allocation as Insights} from '@statechannels/client-api-schema';
+
 import {ConditionalPayment} from './query-engine-types';
 import {ChannelSnapshot} from './types';
 

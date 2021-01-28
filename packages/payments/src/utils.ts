@@ -1,4 +1,3 @@
-import {Allocation, ConditionalPayment, Address, toAddress} from './query-engine-types';
 import {fromJS, nullState, toJS, toQueryRequested} from '@graphprotocol/statechannels-contracts';
 import {
   makeDestination,
@@ -16,6 +15,8 @@ import {
   CreateChannelParams,
   FundingStrategy
 } from '@statechannels/client-api-schema';
+
+import {Allocation, ConditionalPayment, Address, toAddress} from './query-engine-types';
 import {ChannelQueryResponse, ChannelSnapshot} from './types';
 import {EnsureAllocationRequest, ChannelRequest} from './channel-manager';
 

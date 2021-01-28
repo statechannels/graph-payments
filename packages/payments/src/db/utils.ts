@@ -1,6 +1,7 @@
+import path from 'path';
+
 import {DatabaseConnectionConfiguration} from '@statechannels/server-wallet';
 import Knex, {Config} from 'knex';
-import path from 'path';
 
 import {SCHEMA} from './constants';
 

@@ -1,11 +1,12 @@
-import {createPaymentServer, createReceiptServer} from '../src/external-server';
-import {PAYER_SERVER_URL, RECEIPT_SERVER_DB_NAME, PAYER_SERVER_DB_NAME} from '../src/constants';
-import {clearExistingChannels, createTestLogger, generateAllocationIdAndKeys} from '../src/utils';
 import * as fs from 'fs';
-import autocannon from 'autocannon';
 
+import autocannon from 'autocannon';
 import {configureEnvVariables} from '@statechannels/devtools';
 import {Logger} from '@graphprotocol/common-ts';
+
+import {clearExistingChannels, createTestLogger, generateAllocationIdAndKeys} from '../src/utils';
+import {PAYER_SERVER_URL, RECEIPT_SERVER_DB_NAME, PAYER_SERVER_DB_NAME} from '../src/constants';
+import {createPaymentServer, createReceiptServer} from '../src/external-server';
 
 jest.setTimeout(180_000);
 configureEnvVariables();

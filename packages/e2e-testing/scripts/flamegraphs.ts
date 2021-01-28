@@ -1,4 +1,10 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
+import {execSync} from 'child_process';
+import * as fs from 'fs';
+
+import rimraf from 'rimraf';
+import autocannon from 'autocannon';
+
 import {
   createFlameGraphReceiptServer,
   createFlameGraphPaymentServer,
@@ -7,10 +13,6 @@ import {
 } from '../src/external-server';
 import {clearExistingChannels, createTestLogger} from '../src/utils';
 import {RECEIPT_SERVER_DB_NAME, PAYER_SERVER_DB_NAME, PAYER_SERVER_URL} from '../src/constants';
-import {execSync} from 'child_process';
-import rimraf from 'rimraf';
-import * as fs from 'fs';
-import autocannon from 'autocannon';
 
 (async () => {
   // Synchronously delete the clinic folder

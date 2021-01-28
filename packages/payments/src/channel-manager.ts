@@ -1,16 +1,20 @@
 import {Gauge} from 'prom-client';
 import pMap from 'p-map';
-
 import {Logger, Metrics, NetworkContracts} from '@graphprotocol/common-ts';
-
 import {BN, makeDestination, Uint256} from '@statechannels/wallet-core';
-import {DBAdmin, Outgoing, Wallet as ChannelWallet} from '@statechannels/server-wallet';
+import {
+  DBAdmin,
+  Outgoing,
+  Wallet as ChannelWallet,
+  IncomingServerWalletConfig as WalletConfig
+} from '@statechannels/server-wallet';
 import {ChannelResult, Participant} from '@statechannels/client-api-schema';
-import {IncomingServerWalletConfig as WalletConfig} from '@statechannels/server-wallet';
+import _ from 'lodash';
+import {getAttestionAppByteCode} from '@graphprotocol/statechannels-contracts';
+import {Evt} from 'evt';
+import {BigNumber} from 'ethers';
+import AsyncLock from 'async-lock';
 
-import * as Insights from './insights';
-import {Allocation, toAddress} from './query-engine-types';
-import {ChannelCache, createPostgresCache} from './channel-cache';
 import {
   summariseResponse,
   constructStartState,
@@ -21,12 +25,9 @@ import {
   convertBytes32ToAddress,
   extractCapacity
 } from './utils';
-
-import _ from 'lodash';
-import {getAttestionAppByteCode} from '@graphprotocol/statechannels-contracts';
-import {Evt} from 'evt';
-import {BigNumber} from 'ethers';
-import AsyncLock from 'async-lock';
+import {ChannelCache, createPostgresCache} from './channel-cache';
+import {Allocation, toAddress} from './query-engine-types';
+import * as Insights from './insights';
 
 export interface ChannelManagerOptions {
   logger: Logger;

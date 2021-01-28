@@ -6,6 +6,8 @@ import _ from 'lodash';
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import {Client} from 'pg';
 import pino from 'pino';
+import {Allocation} from '@graphprotocol/payments';
+
 import {
   CHAIN_ID,
   RECEIPT_PRIVATE_KEY,
@@ -14,7 +16,6 @@ import {
   TEST_SUBGRAPH_ID,
   VERIFYING_CONTRACT
 } from './constants';
-import {Allocation} from '@graphprotocol/payments';
 
 export async function clearExistingChannels(databaseName: string): Promise<void> {
   const client = new Client({

@@ -1,4 +1,5 @@
 import {abiEncoder, pureJSEncoder, abiDecoder, pureJSDecoder} from '../app-data';
+
 import {attestationProvided, queryDeclined, queryRequested, startState} from './fake-app-data';
 
 function testEncodeDecode(toJS, fromJS) {

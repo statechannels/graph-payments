@@ -1,3 +1,14 @@
+import {Allocation, ChannelResult} from '@statechannels/client-api-schema';
+import {BigNumber} from 'ethers';
+import createPGP, {IDatabase, IMain, ITask, PreparedStatement} from 'pg-promise';
+import _ from 'lodash';
+
+import {ChannelSnapshot} from '../types';
+import {TABLE} from '../db/constants';
+import {extractSnapshot} from '../utils';
+import {createKnex, migrateCacheDB} from '../db/utils';
+import {DatabaseConnectionConfiguration} from '..';
+
 import {
   CacheMaintainerAPI,
   CacheUserAPI,
@@ -5,17 +16,6 @@ import {
   ChannelCache,
   StalledChannelsOpts
 } from './types';
-
-import {Allocation, ChannelResult} from '@statechannels/client-api-schema';
-import {BigNumber} from 'ethers';
-import {ChannelSnapshot} from '../types';
-
-import {TABLE} from '../db/constants';
-import {extractSnapshot} from '../utils';
-import createPGP, {IDatabase, IMain, ITask, PreparedStatement} from 'pg-promise';
-import _ from 'lodash';
-import {createKnex, migrateCacheDB} from '../db/utils';
-import {DatabaseConnectionConfiguration} from '..';
 
 type Row = {
   context_id: string;

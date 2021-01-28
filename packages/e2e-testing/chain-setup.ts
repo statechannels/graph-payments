@@ -1,10 +1,8 @@
 /* eslint-disable no-process-env */
 import {ETHERLIME_ACCOUNTS, GanacheServer} from '@statechannels/devtools';
 import {utils} from 'ethers';
-
 import {deploy as deployNitro} from '@statechannels/server-wallet/lib/deployment/deploy';
 import {deploy as deployGraph} from '@graphprotocol/statechannels-contracts/deployment/deploy';
-
 import _ from 'lodash';
 
 export default async function setup(): Promise<void> {
