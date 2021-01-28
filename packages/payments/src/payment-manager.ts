@@ -2,7 +2,8 @@ import {Histogram, Counter} from 'prom-client';
 import {Logger, Metrics, timed} from '@graphprotocol/common-ts';
 import {
   Wallet as ChannelWallet,
-  IncomingServerWalletConfig as WalletConfig
+  IncomingServerWalletConfig as WalletConfig,
+  MultiThreadedWallet
 } from '@statechannels/server-wallet';
 import {Evt} from 'evt';
 
@@ -42,7 +43,8 @@ export class PaymentManager implements PaymentManagementAPI {
 
   static async create(opts: PaymentManagerOptions): Promise<PaymentManagementAPI> {
     const paymentManager = new PaymentManager(await ChannelWallet.create(opts.walletConfig), opts);
-    await paymentManager.wallet.warmUpThreads();
+    paymentManager.wallet instanceof MultiThreadedWallet &&
+      (await paymentManager.wallet.warmUpThreads());
     return paymentManager;
   }
 
