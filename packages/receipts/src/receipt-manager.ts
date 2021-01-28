@@ -2,7 +2,8 @@ import {ChannelResult} from '@statechannels/client-api-schema';
 import {
   DBAdmin,
   Wallet,
-  IncomingServerWalletConfig as WalletConfig
+  IncomingServerWalletConfig as WalletConfig,
+  MultiThreadedWallet
 } from '@statechannels/server-wallet';
 import {Logger, NetworkContracts} from '@graphprotocol/common-ts';
 import {
@@ -44,6 +45,7 @@ export class ReceiptManager implements ReceiptManagerInterface {
     const wallet = await Wallet.create(walletConfig);
     await wallet.addSigningKey(makePrivateKey(privateKey));
     await wallet.registerAppBytecode(contracts.attestationApp.address, getAttestionAppByteCode());
+    wallet instanceof MultiThreadedWallet && (await wallet.warmUpThreads());
 
     return new ReceiptManager(logger, privateKey, contracts, wallet);
   }
@@ -54,7 +56,6 @@ export class ReceiptManager implements ReceiptManagerInterface {
     wallet: Wallet
   ) {
     this.wallet = wallet;
-    this.wallet.warmUpThreads();
   }
 
   async closeDBConnections(): Promise<void> {
