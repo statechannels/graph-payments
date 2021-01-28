@@ -11,7 +11,6 @@ import {
 import {clearExistingChannels, createTestLogger, generateAllocationIdAndKeys} from '../src/utils';
 import * as fs from 'fs';
 import {configureEnvVariables, ETHERLIME_ACCOUNTS} from '@statechannels/devtools';
-
 import axios from 'axios';
 import _ from 'lodash';
 import {
@@ -19,29 +18,7 @@ import {
   overwriteConfigWithDatabaseConnection,
   Wallet as ChannelWallet
 } from '@statechannels/server-wallet';
-jest.setTimeout(60_000);
 
-const NUM_ALLOCATIONS = 2;
-
-configureEnvVariables();
-
-const useLedger = process.env.USE_LEDGER || false;
-const useChain = process.env.FUNDING_STRATEGY === 'Direct';
-
-export const LOG_FILE = `/tmp/e2e-test-${useLedger ? 'with-ledger' : 'without-ledger'}-${
-  useChain ? 'with-chain' : 'without-chain'
-}.log`;
-const logFileArg = `--logFile ${LOG_FILE}`;
-const ledgerArg = `--useLedger ${useLedger}`;
-const fundingArg = `--fundingStrategy ${process.env.FUNDING_STRATEGY || 'Fake'}`;
-const threadingArg = `--amountOfWorkerThreads ${process.env.AMOUNT_OF_WORKER_THREADS || 0}`;
-
-const numAllocationsArg = `--numAllocations ${NUM_ALLOCATIONS}`;
-
-const serverArgs = [ledgerArg, logFileArg, fundingArg, threadingArg, numAllocationsArg];
-
-const gatewayServer = createPaymentServer(serverArgs);
-const indexerServer = createReceiptServer(serverArgs);
 import {defaultTestConfig} from '@statechannels/server-wallet';
 import {ChannelResult} from '@statechannels/client-api-schema';
 import {BigNumber, providers} from 'ethers';
@@ -49,7 +26,24 @@ import {ContractArtifacts} from '@statechannels/nitro-protocol';
 import {Contract} from 'ethers';
 import {NULL_APP_DATA} from '@statechannels/wallet-core';
 import {Logger} from '@graphprotocol/common-ts';
-let logger: Logger;
+
+// Setup / Configuration
+jest.setTimeout(60_000);
+const NUM_ALLOCATIONS = 2;
+configureEnvVariables();
+const useLedger = process.env.USE_LEDGER || false;
+const useChain = process.env.FUNDING_STRATEGY === 'Direct';
+const LOG_FILE = `/tmp/e2e-test-${useLedger ? 'with-ledger' : 'without-ledger'}-${
+  useChain ? 'with-chain' : 'without-chain'
+}.log`;
+const logFileArg = `--logFile ${LOG_FILE}`;
+const ledgerArg = `--useLedger ${useLedger}`;
+const fundingArg = `--fundingStrategy ${process.env.FUNDING_STRATEGY || 'Fake'}`;
+const threadingArg = `--amountOfWorkerThreads ${process.env.AMOUNT_OF_WORKER_THREADS || 0}`;
+const numAllocationsArg = `--numAllocations ${NUM_ALLOCATIONS}`;
+const serverArgs = [ledgerArg, logFileArg, fundingArg, threadingArg, numAllocationsArg];
+const gatewayServer = createPaymentServer(serverArgs);
+const indexerServer = createReceiptServer(serverArgs);
 const baseConfig = defaultTestConfig({
   networkConfiguration: {
     chainNetworkID: process.env.CHAIN_ID
@@ -69,103 +63,45 @@ const receiverConfig = overwriteConfigWithDatabaseConnection(baseConfig, {
   database: RECEIPT_SERVER_DB_NAME
 });
 
+// Setup / Teardown callbacks
+let logger: Logger;
+let provider: providers.JsonRpcProvider;
+let assetHolder: Contract;
 let paymentWallet: ChannelWallet;
 let receiptWallet: ChannelWallet;
+
 beforeAll(async () => {
+  setupLogging();
+  setupContractMonitor();
   await DBAdmin.migrateDatabase(payerConfig);
   await DBAdmin.migrateDatabase(receiverConfig);
   paymentWallet = await ChannelWallet.create(payerConfig);
   receiptWallet = await ChannelWallet.create(receiverConfig);
 });
 
-const getChannels = async (database: 'receipt' | 'payment') => {
-  const wallet = database === 'receipt' ? receiptWallet : paymentWallet;
-  // Filter out the ledger channels results
-  return (await wallet.getChannels()).channelResults.filter((c) => c.appData !== NULL_APP_DATA);
-};
-
-const expectChannelsHaveStatus = async (
-  channels: ChannelResult[],
-  status: 'running' | 'closed'
-) => {
-  for (const channel of channels) {
-    expect(channel).toMatchObject({status});
+beforeEach(async () => {
+  try {
+    await Promise.all([RECEIPT_SERVER_DB_NAME, PAYER_SERVER_DB_NAME].map(clearExistingChannels));
+    await Promise.all([gatewayServer.start(logger), indexerServer.start(logger)]);
+  } catch (error) {
+    logger.error(error);
+    process.exit(1);
   }
-};
-// We know the destination of the second allocationItem will be the allocationId
-const getChannelsForAllocations = (channels: ChannelResult[], allocationId: string) =>
-  channels.filter((c) =>
-    BigNumber.from(allocationId).eq(c.allocations[0].allocationItems[1].destination)
-  );
+});
 
-const successfulPayment = (params?: {
-  privateKey?: string;
-  allocationId?: string;
-  expectPaymentNotReceived?: boolean;
-  expectReceiptNotReceived?: boolean;
-}) => {
-  const defaultParams = generateAllocationIdAndKeys(1)[0];
+afterEach(async () => {
+  await Promise.all([gatewayServer.stop(), indexerServer.stop()]);
+});
 
-  return axios.get(`${PAYER_SERVER_URL}/sendPayment`, {params: _.merge(defaultParams, params)});
-};
-const syncChannels = () => axios.get(`${PAYER_SERVER_URL}/syncChannels`);
+afterAll(async () => {
+  teardownContractMonitor();
+  await paymentWallet.destroy();
+  await receiptWallet.destroy();
+});
+
+// Tests
 
 describe('Payment & Receipt Managers E2E', () => {
-  let provider: providers.JsonRpcProvider;
-  let assetHolder: Contract;
-
-  const mine6Blocks = () => _.range(6).forEach(() => provider?.send('evm_mine', []));
-
-  function setupLogging() {
-    LOG_FILE && fs.existsSync(LOG_FILE) && fs.truncateSync(LOG_FILE);
-    logger = createTestLogger(LOG_FILE);
-    (logger as any).level = 'debug';
-  }
-
-  function setupContractMonitor() {
-    if (process.env.RPC_ENDPOINT /* defined in chain-setup.ts */) {
-      provider = new providers.JsonRpcProvider(process.env.RPC_ENDPOINT);
-      assetHolder = new Contract(
-        process.env.ETH_ASSET_HOLDER_ADDRESS as string,
-        ContractArtifacts.EthAssetHolderArtifact.abi,
-        provider
-      );
-      assetHolder.on('Deposited', mine6Blocks);
-      assetHolder.on('AllocationUpdated', mine6Blocks);
-    }
-  }
-
-  function teardownContractMonitor() {
-    if (process.env.RPC_ENDPOINT /* defined in chain-setup.ts */) {
-      assetHolder.off('Deposited', mine6Blocks);
-      assetHolder.off('AllocationUpdated', mine6Blocks);
-    }
-  }
-
-  beforeAll(() => {
-    setupLogging();
-    setupContractMonitor();
-  });
-
-  beforeEach(async () => {
-    try {
-      await Promise.all([RECEIPT_SERVER_DB_NAME, PAYER_SERVER_DB_NAME].map(clearExistingChannels));
-      await Promise.all([gatewayServer.start(logger), indexerServer.start(logger)]);
-    } catch (error) {
-      logger.error(error);
-      process.exit(1);
-    }
-  });
-
-  afterEach(async () => {
-    await Promise.all([gatewayServer.stop(), indexerServer.stop()]);
-  });
-
-  afterAll(async () => {
-    teardownContractMonitor();
-    await paymentWallet.destroy();
-    await receiptWallet.destroy();
-  });
   test(`Can create and pay with ${NUM_ALLOCATIONS} allocations`, async () => {
     // Make 2 payments per allocation
     const allocations = generateAllocationIdAndKeys(NUM_ALLOCATIONS);
@@ -253,3 +189,64 @@ describe('Payment & Receipt Managers E2E', () => {
     await expect(successfulPayment()).resolves.toMatchObject({status: 200});
   });
 });
+
+// Helpers
+
+function setupLogging() {
+  LOG_FILE && fs.existsSync(LOG_FILE) && fs.truncateSync(LOG_FILE);
+  logger = createTestLogger(LOG_FILE);
+  (logger as any).level = 'debug';
+}
+const mine6Blocks = () => _.range(6).forEach(() => provider?.send('evm_mine', []));
+
+function setupContractMonitor() {
+  if (process.env.RPC_ENDPOINT /* defined in chain-setup.ts */) {
+    provider = new providers.JsonRpcProvider(process.env.RPC_ENDPOINT);
+    assetHolder = new Contract(
+      process.env.ETH_ASSET_HOLDER_ADDRESS as string,
+      ContractArtifacts.EthAssetHolderArtifact.abi,
+      provider
+    );
+    assetHolder.on('Deposited', mine6Blocks);
+    assetHolder.on('AllocationUpdated', mine6Blocks);
+  }
+}
+
+function teardownContractMonitor() {
+  if (process.env.RPC_ENDPOINT /* defined in chain-setup.ts */) {
+    assetHolder.off('Deposited', mine6Blocks);
+    assetHolder.off('AllocationUpdated', mine6Blocks);
+  }
+}
+
+const getChannels = async (database: 'receipt' | 'payment') => {
+  const wallet = database === 'receipt' ? receiptWallet : paymentWallet;
+  // Filter out the ledger channels results
+  return (await wallet.getChannels()).channelResults.filter((c) => c.appData !== NULL_APP_DATA);
+};
+
+const expectChannelsHaveStatus = async (
+  channels: ChannelResult[],
+  status: 'running' | 'closed'
+) => {
+  for (const channel of channels) {
+    expect(channel).toMatchObject({status});
+  }
+};
+// We know the destination of the second allocationItem will be the allocationId
+const getChannelsForAllocations = (channels: ChannelResult[], allocationId: string) =>
+  channels.filter((c) =>
+    BigNumber.from(allocationId).eq(c.allocations[0].allocationItems[1].destination)
+  );
+
+const successfulPayment = (params?: {
+  privateKey?: string;
+  allocationId?: string;
+  expectPaymentNotReceived?: boolean;
+  expectReceiptNotReceived?: boolean;
+}) => {
+  const defaultParams = generateAllocationIdAndKeys(1)[0];
+
+  return axios.get(`${PAYER_SERVER_URL}/sendPayment`, {params: _.merge(defaultParams, params)});
+};
+const syncChannels = () => axios.get(`${PAYER_SERVER_URL}/syncChannels`);
