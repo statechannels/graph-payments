@@ -24,6 +24,7 @@ async function dbScripts() {
     console.error('Error occured migrating', error);
     process.exit(1);
   }
+  process.exit(0);
 }
 
 async function handleDBCommand(
