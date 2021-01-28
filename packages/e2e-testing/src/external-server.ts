@@ -1,9 +1,11 @@
 import {exec, ChildProcess} from 'child_process';
+import * as path from 'path';
+
 import waitOn from 'wait-on';
 import kill from 'tree-kill';
-import * as path from 'path';
-import {PAYER_SERVER_URL, RECEIPT_SERVER_URL} from './constants';
 import {Logger} from '@graphprotocol/common-ts';
+
+import {PAYER_SERVER_URL, RECEIPT_SERVER_URL} from './constants';
 
 class ExternalServer {
   private serverProcess: ChildProcess | undefined = undefined;

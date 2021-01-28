@@ -7,10 +7,10 @@ import {
   SimpleAllocation,
   serializeOutcome,
   deserializeAllocations,
-  createSignatureEntry
+  createSignatureEntry,
+  validatePayload
 } from '@statechannels/wallet-core';
 import pMap from 'p-map';
-import {validatePayload} from '@statechannels/wallet-core';
 import {
   SignedState as WireState,
   Payload as WirePayload,
@@ -18,12 +18,14 @@ import {
 } from '@statechannels/wire-format';
 import {BigNumber, constants, utils, Wallet} from 'ethers';
 import {Logger, SubgraphDeploymentID} from '@graphprotocol/common-ts';
-import {Allocation, QueryExecutionResult} from '../query-engine-types';
-import {isLedgerChannel} from '../utils';
-import {buildTestAllocation} from './crash-test-dummies';
 import {signAttestation, toAttestationProvided} from '@graphprotocol/statechannels-contracts';
 import {defaultTestConfig} from '@statechannels/server-wallet';
 import base58 from 'bs58';
+
+import {Allocation, QueryExecutionResult} from '../query-engine-types';
+import {isLedgerChannel} from '../utils';
+
+import {buildTestAllocation} from './crash-test-dummies';
 
 const RECEIPT_PRIVATE_KEY = '0xa69a8d9fde414bdf8b5d76bbff63bd78704fe3da1d938cd10126a9e2e3e0e11f';
 

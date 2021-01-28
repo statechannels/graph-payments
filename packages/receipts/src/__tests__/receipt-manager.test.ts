@@ -5,11 +5,16 @@
  */
 process.env.SERVER_DB_NAME = 'receipt_manager';
 
-import {SignedState, Payload} from '@statechannels/wallet-core';
-
-import {Message as WireMessage} from '@statechannels/client-api-schema';
-
 import * as fs from 'fs';
+
+import {SignedState, Payload} from '@statechannels/wallet-core';
+import {Message as WireMessage} from '@statechannels/client-api-schema';
+import {toJS} from '@graphprotocol/statechannels-contracts';
+import {
+  defaultTestConfig,
+  overwriteConfigWithDatabaseConnection,
+  DBAdmin
+} from '@statechannels/server-wallet';
 
 import {ReceiptManager} from '../receipt-manager';
 import {
@@ -22,13 +27,8 @@ import {
   mockCloseChannelMessage,
   mockContracts
 } from '../__mocks__/receipt-manager.mocks';
-import {toJS} from '@graphprotocol/statechannels-contracts';
+
 import {createTestLogger} from './setup';
-import {
-  defaultTestConfig,
-  overwriteConfigWithDatabaseConnection
-} from '@statechannels/server-wallet';
-import {DBAdmin} from '@statechannels/server-wallet';
 
 const LOG_FILE = '/tmp/receipt-manager-test.log';
 // const LOG_FILE = undefined // turn off logging

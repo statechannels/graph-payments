@@ -1,29 +1,30 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
-import {NetworkContracts} from '@graphprotocol/common-ts';
-import {FakeIndexer} from './fake-indexer';
-import {TEST_ALLOCATION, TEST_PAYMENT} from './crash-test-dummies';
-import {Wallet as ChannelWallet} from '@statechannels/server-wallet';
-
 import * as fs from 'fs';
 
+import {NetworkContracts} from '@graphprotocol/common-ts';
+import {
+  Wallet as ChannelWallet,
+  defaultTestConfig,
+  overwriteConfigWithDatabaseConnection
+} from '@statechannels/server-wallet';
+import {constants} from 'ethers';
+import {BN} from '@statechannels/wallet-core';
+
+import {createPostgresCache} from '../channel-cache';
+import {ChannelManager, ChannelManagerOptions} from '../channel-manager';
+import {ChannelManagerInsightEvent} from '../insights';
+import {Allocation} from '../query-engine-types';
+
+import {FakeIndexer} from './fake-indexer';
+import {TEST_ALLOCATION, TEST_PAYMENT} from './crash-test-dummies';
 import {
   createTestLogger,
   PAYMENT_MANAGER_TEST_DB_CONNECTION_STRING,
   PAYMENT_MANAGER_TEST_DB_NAME
 } from './setup';
-import {constants} from 'ethers';
 import {TestChannelManager} from './test-channel-manager';
-import {createPostgresCache} from '../channel-cache';
 import {TestPaymentManager} from './test-payment-manager';
-import {ChannelManager, ChannelManagerOptions} from '../channel-manager';
-import {ChannelManagerInsightEvent} from '../insights';
-import {BN} from '@statechannels/wallet-core';
-import {Allocation} from '../query-engine-types';
-import {
-  defaultTestConfig,
-  overwriteConfigWithDatabaseConnection
-} from '@statechannels/server-wallet';
 
 jest.setTimeout(30_000);
 const RECEIPT_PRIVATE_KEY = '0xa69a8d9fde414bdf8b5d76bbff63bd78704fe3da1d938cd10126a9e2e3e0e11f';

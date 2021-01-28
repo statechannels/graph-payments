@@ -3,7 +3,6 @@ import express from 'express';
 import joi from 'joi';
 import throng from 'throng';
 import {Argv, scriptName} from 'yargs';
-
 import {NetworkContracts, createMetrics, Logger} from '@graphprotocol/common-ts';
 import {
   createPostgresCache,
@@ -14,9 +13,18 @@ import {
 } from '@graphprotocol/payments';
 import _ from 'lodash';
 import axios from 'axios';
-
 import bodyParser from 'body-parser';
+import waitOn from 'wait-on';
+import {BigNumber, constants, Wallet} from 'ethers';
+import {BN} from '@statechannels/wallet-core';
+import {
+  defaultTestConfig,
+  overwriteConfigWithDatabaseConnection
+} from '@statechannels/server-wallet';
+import {Address} from '@graphprotocol/statechannels-contracts';
+import {ETHERLIME_ACCOUNTS} from '@statechannels/devtools';
 
+import {createTestLogger, generateAllocations} from './utils';
 import {
   RECEIPT_SERVER_URL,
   PAYER_SERVER_PORT,
@@ -26,16 +34,6 @@ import {
   TEST_SUBGRAPH_ID,
   TEST_ATTESTATION_APP_ADDRESS
 } from './constants';
-import waitOn from 'wait-on';
-import {createTestLogger, generateAllocations} from './utils';
-import {BigNumber, constants, Wallet} from 'ethers';
-import {BN} from '@statechannels/wallet-core';
-import {
-  defaultTestConfig,
-  overwriteConfigWithDatabaseConnection
-} from '@statechannels/server-wallet';
-import {Address} from '@graphprotocol/statechannels-contracts';
-import {ETHERLIME_ACCOUNTS} from '@statechannels/devtools';
 
 type MessageSenderConfig = {
   dropOutgoingRate: number;

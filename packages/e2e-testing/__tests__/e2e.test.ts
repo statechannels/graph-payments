@@ -1,5 +1,22 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import {createPaymentServer, createReceiptServer} from '../src/external-server';
+import * as fs from 'fs';
+
+import {configureEnvVariables, ETHERLIME_ACCOUNTS} from '@statechannels/devtools';
+import axios from 'axios';
+import _ from 'lodash';
+import {
+  DBAdmin,
+  overwriteConfigWithDatabaseConnection,
+  Wallet as ChannelWallet,
+  defaultTestConfig
+} from '@statechannels/server-wallet';
+import {ChannelResult} from '@statechannels/client-api-schema';
+import {BigNumber, providers, Contract} from 'ethers';
+import {ContractArtifacts} from '@statechannels/nitro-protocol';
+import {NULL_APP_DATA} from '@statechannels/wallet-core';
+import {Logger} from '@graphprotocol/common-ts';
+
+import {clearExistingChannels, createTestLogger, generateAllocationIdAndKeys} from '../src/utils';
 import {
   PAYER_SERVER_URL,
   RECEIPT_SERVER_DB_NAME,
@@ -8,24 +25,7 @@ import {
   RESPONSE_CID,
   TEST_SUBGRAPH_ID
 } from '../src/constants';
-import {clearExistingChannels, createTestLogger, generateAllocationIdAndKeys} from '../src/utils';
-import * as fs from 'fs';
-import {configureEnvVariables, ETHERLIME_ACCOUNTS} from '@statechannels/devtools';
-import axios from 'axios';
-import _ from 'lodash';
-import {
-  DBAdmin,
-  overwriteConfigWithDatabaseConnection,
-  Wallet as ChannelWallet
-} from '@statechannels/server-wallet';
-
-import {defaultTestConfig} from '@statechannels/server-wallet';
-import {ChannelResult} from '@statechannels/client-api-schema';
-import {BigNumber, providers} from 'ethers';
-import {ContractArtifacts} from '@statechannels/nitro-protocol';
-import {Contract} from 'ethers';
-import {NULL_APP_DATA} from '@statechannels/wallet-core';
-import {Logger} from '@graphprotocol/common-ts';
+import {createPaymentServer, createReceiptServer} from '../src/external-server';
 
 // Setup / Configuration
 jest.setTimeout(60_000);

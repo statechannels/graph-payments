@@ -1,6 +1,5 @@
 import {SubgraphDeploymentID} from '@graphprotocol/common-ts';
 import {BigNumber, constants, utils} from 'ethers';
-
 import * as base58 from 'bs58';
 import {defaultTestConfig} from '@statechannels/server-wallet';
 export const RECEIPT_SERVER_PORT = 5198;

@@ -1,7 +1,7 @@
+import * as fs from 'fs';
+
 import _, {range} from 'lodash';
 import {scriptName} from 'yargs';
-
-import * as fs from 'fs';
 
 /*
 Simple utility to generate a geometric random variable, a non-negative integer with mean 1/p.

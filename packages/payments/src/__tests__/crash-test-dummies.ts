@@ -2,6 +2,7 @@
 import {ethers, utils, BigNumber} from 'ethers';
 import {SubgraphDeploymentID} from '@graphprotocol/common-ts';
 import * as base58 from 'bs58';
+
 import {Allocation, ConditionalPayment, toAddress} from '../query-engine-types';
 
 export const LOG_FILE = '/tmp/mock-gateway.log';

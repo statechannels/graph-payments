@@ -1,15 +1,15 @@
 import {Argv, scriptName} from 'yargs';
-
 import {ethers} from 'ethers';
 import _ from 'lodash';
-
 import {ChannelResult} from '@statechannels/client-api-schema';
+
 import {ChannelSnapshot} from '../types';
 import {TABLE} from '../db/constants';
 import {delay} from '../utils';
 import {createPostgresCache} from '../channel-cache/postgres-cache';
-import {CACHE_TEST_DB_CONNECTION_STRING} from './setup';
 import {createKnex} from '../db/utils';
+
+import {CACHE_TEST_DB_CONNECTION_STRING} from './setup';
 
 const knex = createKnex(CACHE_TEST_DB_CONNECTION_STRING);
 const cache = createPostgresCache(CACHE_TEST_DB_CONNECTION_STRING);

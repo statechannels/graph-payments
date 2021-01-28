@@ -1,8 +1,10 @@
 import {Histogram, Counter} from 'prom-client';
-
 import {Logger, Metrics, timed} from '@graphprotocol/common-ts';
-
-import {Wallet as ChannelWallet} from '@statechannels/server-wallet';
+import {
+  Wallet as ChannelWallet,
+  IncomingServerWalletConfig as WalletConfig
+} from '@statechannels/server-wallet';
+import {Evt} from 'evt';
 
 import {ConditionalPayment} from './query-engine-types';
 import {ChannelQueryResponse} from './types';
@@ -15,9 +17,7 @@ import {
   extractAllocationId
 } from './utils';
 import {CacheUserAPI} from './channel-cache/types';
-import {Evt} from 'evt';
 import {PaymentManagerInsightEvent} from './insights';
-import {IncomingServerWalletConfig as WalletConfig} from '@statechannels/server-wallet';
 import {createPostgresCache} from './channel-cache';
 
 export interface PaymentManagerOptions {

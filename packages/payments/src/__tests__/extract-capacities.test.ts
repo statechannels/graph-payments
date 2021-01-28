@@ -1,6 +1,8 @@
 import {fixture} from '@graphprotocol/statechannels-contracts/lib/test/fixture';
+
 import {ChannelRequest, EnsureAllocationRequest} from '../channel-manager';
 import {extractCapacity} from '../utils';
+
 import {TEST_ALLOCATION} from './crash-test-dummies';
 
 type WithCapacities = {currentCapacities: Record<string, number | undefined>};

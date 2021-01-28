@@ -1,5 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import pino from 'pino';
+
 import {DatabaseConnectionConfiguration} from '..';
 
 const hooks = {

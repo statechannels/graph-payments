@@ -1,7 +1,8 @@
-import {Address, AppData, fromJS, nullState, toJS, VariableAppData} from './app-data';
 import {Allocation} from '@statechannels/client-api-schema';
 import {BN, makeDestination} from '@statechannels/wallet-core';
 import {BigNumber, constants as ethersConstants} from 'ethers';
+
+import {Address, AppData, fromJS, nullState, toJS, VariableAppData} from './app-data';
 
 type ReturnType = {appData: string; allocation: Allocation};
 // TODO: These should probably be tested

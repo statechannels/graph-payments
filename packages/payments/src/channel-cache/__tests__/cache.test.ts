@@ -1,15 +1,15 @@
 import {Address, toAddress} from '@graphprotocol/common-ts';
 import {fromJS, nullState} from '@graphprotocol/statechannels-contracts';
 import {ChannelResult} from '@statechannels/client-api-schema';
+import {BigNumber} from 'ethers';
+import _ from 'lodash';
+import Knex from 'knex';
+import {makeDestination} from '@statechannels/wallet-core';
 
 import {CACHE_TEST_DB_CONNECTION_STRING, createTestLogger} from '../../__tests__/setup';
 import {ChannelSnapshot} from '../../types';
 import {createPostgresCache} from '../postgres-cache';
-import {BigNumber} from 'ethers';
-import _ from 'lodash';
-import Knex from 'knex';
 import {createKnex, migrateCacheDB} from '../../db/utils';
-import {makeDestination} from '@statechannels/wallet-core';
 
 const baseLogger = createTestLogger('/tmp/channel-cache.log');
 baseLogger.level = 'debug';

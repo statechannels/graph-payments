@@ -1,4 +1,5 @@
 import {Wallet} from '@statechannels/server-wallet';
+
 import {PaymentManager, PaymentManagerOptions} from '../payment-manager';
 
 export class TestPaymentManager extends PaymentManager {

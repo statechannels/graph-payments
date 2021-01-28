@@ -1,5 +1,9 @@
 import {ChannelResult} from '@statechannels/client-api-schema';
-import {DBAdmin, Wallet} from '@statechannels/server-wallet';
+import {
+  DBAdmin,
+  Wallet,
+  IncomingServerWalletConfig as WalletConfig
+} from '@statechannels/server-wallet';
 import {Logger, NetworkContracts} from '@graphprotocol/common-ts';
 import {
   toAttestationProvided,
@@ -8,9 +12,9 @@ import {
 } from '@graphprotocol/statechannels-contracts';
 import _ from 'lodash';
 import {constants} from 'ethers';
-import {IncomingServerWalletConfig as WalletConfig} from '@statechannels/server-wallet';
-import {extractSnapshot, isLedgerChannel, summarisePayload} from './utils';
 import {makePrivateKey} from '@statechannels/wallet-core';
+
+import {extractSnapshot, isLedgerChannel, summarisePayload} from './utils';
 
 interface ReceiptManagerInterface {
   inputStateChannelMessage(payload: unknown): Promise<void | unknown>;

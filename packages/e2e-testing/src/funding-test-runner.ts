@@ -1,7 +1,9 @@
 /* eslint-disable @typescript-eslint/no-non-null-assertion */
-import axios from 'axios';
 import * as fs from 'fs';
+
+import axios from 'axios';
 import _ from 'lodash';
+
 import {PAYER_SERVER_URL} from './constants';
 import {SyncAllocationEvent, StoredTestData} from './load-generator';
 import {JoiAllocation, toJoiAllocation} from './schema';

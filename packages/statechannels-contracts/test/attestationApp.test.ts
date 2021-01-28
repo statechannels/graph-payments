@@ -1,6 +1,5 @@
 import {Contract, constants, ethers} from 'ethers';
 import {SigningKey, randomBytes, joinSignature} from 'ethers/lib/utils';
-
 import {
   encodeOutcome,
   AssetOutcomeShortHand,
@@ -10,12 +9,14 @@ import {
   Outcome
 } from '@statechannels/nitro-protocol';
 import {expectRevert} from '@statechannels/devtools';
+import {BN, makeDestination} from '@statechannels/wallet-core';
+import {Allocation, AllocationItem} from '@statechannels/client-api-schema';
+
 import Artifact from '../artifacts/contracts/AttestationApp.sol/AttestationApp.json';
 import {AppData, fromJS, nullState, toJS} from '../src/utils/app-data';
-import {BN, makeDestination} from '@statechannels/wallet-core';
-import {fixture} from './fixture';
 import {toAttestationProvided} from '../src';
-import {Allocation, AllocationItem} from '@statechannels/client-api-schema';
+
+import {fixture} from './fixture';
 
 const {AddressZero, HashZero} = constants;
 

@@ -1,17 +1,9 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import express from 'express';
-
 import bodyParser from 'body-parser';
 import {ReceiptManager} from '@graphprotocol/receipts';
-import {
-  RECEIPT_PRIVATE_KEY,
-  RECEIPT_SERVER_PORT,
-  RECEIPT_SERVER_URL,
-  TEST_ATTESTATION_APP_ADDRESS
-} from './constants';
 import {Argv, scriptName} from 'yargs';
 import throng from 'throng';
-import {createTestLogger, generateAttestations} from './utils';
 import {
   defaultTestConfig,
   overwriteConfigWithDatabaseConnection
@@ -19,6 +11,14 @@ import {
 import {ETHERLIME_ACCOUNTS} from '@statechannels/devtools';
 import {constants} from 'ethers';
 import {Logger, NetworkContracts} from '@graphprotocol/common-ts';
+
+import {createTestLogger, generateAttestations} from './utils';
+import {
+  RECEIPT_PRIVATE_KEY,
+  RECEIPT_SERVER_PORT,
+  RECEIPT_SERVER_URL,
+  TEST_ATTESTATION_APP_ADDRESS
+} from './constants';
 
 const builder = (yargs: Argv): Argv =>
   yargs

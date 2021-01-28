@@ -1,5 +1,6 @@
 import {getAttestionAppByteCode} from '@graphprotocol/statechannels-contracts';
 import {DBAdmin, Wallet} from '@statechannels/server-wallet';
+
 import {ChannelManager, ChannelManagerOptions} from '../channel-manager';
 
 export class TestChannelManager extends ChannelManager {

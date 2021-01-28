@@ -1,8 +1,10 @@
 import * as path from 'path';
+
 import Knex, {Config} from 'knex';
 import yargs from 'yargs';
-import {SCHEMA} from '../src/db/constants';
 import {parse} from 'pg-connection-string';
+
+import {SCHEMA} from '../src/db/constants';
 async function dbScripts() {
   const parser = yargs
     .command(
