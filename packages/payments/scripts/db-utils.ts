@@ -10,16 +10,15 @@ async function dbScripts() {
         'migrate [dbConnection]',
         'Migrate the database',
         (args) => args.positional('dbConnection', {type: 'string', required: true}),
-        ({dbConnection}) => handleDBCommand('migrate', dbConnection)
+        ({dbConnection}) => handleDBCommand('migrate', dbConnection).then(process.exit(0))
       )
       .command(
         'create_schema [dbConnection]',
         'Creates necessesary database schema',
         (args) => args.positional('dbConnection', {type: 'string', required: true}),
-        ({dbConnection}) => handleDBCommand('create_schema', dbConnection)
+        ({dbConnection}) => handleDBCommand('create_schema', dbConnection).then(process.exit(0))
       )
       .help().argv;
-    process.exit(0);
   } catch (error) {
     console.error('Error occured migrating', error);
     process.exit(1);
@@ -66,9 +65,7 @@ async function handleDBCommand(
     await knex.raw('CREATE SCHEMA IF NOT EXISTS payment_manager');
     if (command === 'migrate') {
       console.log('Running cache migrations');
-
       await knex.migrate.latest();
-      process.exit(0);
     }
   } catch (error) {
     console.error('Error occured', error);
