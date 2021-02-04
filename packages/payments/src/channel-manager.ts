@@ -592,7 +592,15 @@ export class ChannelManager implements ChannelManagementAPI {
 
       const result = await this.wallet.syncChannel({channelId: ledgerChannelId});
 
-      await this.ensureChannelsOpen(result.outbox[0]);
+      try {
+        await this.ensureChannelsOpen(result.outbox[0]);
+      } catch (err) {
+        this.logger.error('Failed to ensure ledger channel reached a running / open state', {
+          ledgerChannelId,
+          err
+        });
+        return;
+      }
 
       this.logger.info(`Channels being created`, {
         ledgerChannelId,
@@ -622,10 +630,19 @@ export class ChannelManager implements ChannelManagementAPI {
         channelIds
       });
 
-      await pMap(
-        outbox,
-        async (msg) => await this.insertActiveChannels(await this.ensureChannelsOpen(msg))
-      );
+      await pMap(outbox, async (msg) => {
+        let channelResults: ChannelResult[];
+        try {
+          channelResults = await this.ensureChannelsOpen(msg);
+        } catch (err) {
+          this.logger.error('Failed to ensure payment channels reached a running / open state', {
+            channelIds,
+            err
+          });
+          return;
+        }
+        await this.insertActiveChannels(channelResults);
+      });
     });
   }
 
