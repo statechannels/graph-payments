@@ -399,6 +399,8 @@ export class ChannelManager implements ChannelManagementAPI {
   private async ensureChannelsOpen(initialMessage: Outgoing): Promise<ChannelResult[]> {
     let channelResults = await this.exchangeMessagesUntilOutboxIsEmpty(initialMessage);
 
+    const channelIds = _.map(channelResults, 'channelId');
+
     for (const retryTimeoutMs of [2_500, 5_000, 10_000, 20_000, 40_000]) {
       const [running, notRunning] = _.partition(channelResults, ['status', 'running']);
 
@@ -406,7 +408,9 @@ export class ChannelManager implements ChannelManagementAPI {
 
       await delay(retryTimeoutMs);
 
-      channelResults = await this._syncChannels(_.map(notRunning, 'channelId'));
+      channelResults = await this._syncChannels(
+        _.difference(channelIds, _.map(running, 'channelId'))
+      );
     }
 
     throw new Error('Unable to ensure channels open');
