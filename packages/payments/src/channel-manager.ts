@@ -397,20 +397,26 @@ export class ChannelManager implements ChannelManagementAPI {
    * and then s yncs all channels for the resulting allocation
    */
   private async ensureChannelsOpen(initialMessage: Outgoing): Promise<ChannelResult[]> {
-    let channelResults = await this.exchangeMessagesUntilOutboxIsEmpty(initialMessage);
+    const running: Record<string, ChannelResult> = {};
+    const notRunning: Record<string, ChannelResult> = {};
 
-    const channelIds = _.map(channelResults, 'channelId');
+    let results = await this.exchangeMessagesUntilOutboxIsEmpty(initialMessage);
 
     for (const retryTimeoutMs of [2_500, 5_000, 10_000, 20_000, 40_000]) {
-      const [running, notRunning] = _.partition(channelResults, ['status', 'running']);
+      const [nowRunning, stillNotRunning] = _.partition(results, ['status', 'running']);
 
-      if (notRunning.length === 0) return running;
+      nowRunning.forEach((c) => {
+        running[c.channelId] = c;
+        delete notRunning[c.channelId];
+      });
+
+      stillNotRunning.forEach((c) => (notRunning[c.channelId] = c));
+
+      if (_.values(notRunning).length === 0) return _.values(running);
 
       await delay(retryTimeoutMs);
 
-      channelResults = await this._syncChannels(
-        _.difference(channelIds, _.map(running, 'channelId'))
-      );
+      results = await this._syncChannels(_.keys(notRunning));
     }
 
     throw new Error('Unable to ensure channels open');
