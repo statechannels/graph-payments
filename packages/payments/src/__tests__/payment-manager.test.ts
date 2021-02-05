@@ -264,7 +264,7 @@ describe('ChannelManager', () => {
 
     // sync allocations
     await channelManager.syncAllocations([request(fakeIndexer.allocation(allocationId))]);
-    expect(await channelManager.activeChannelCount(allocationId)).toEqual(2);
+    expect(await channelManager.activeChannelCount(allocationId)).toEqual(0);
 
     fakeIndexer.goOnline();
     const paymentManager = await TestPaymentManager.create({
