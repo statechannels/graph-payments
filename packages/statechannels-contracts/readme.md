@@ -4,7 +4,7 @@
 
 ### Short answer
 
-[https://docs.statechannels.org/contract-api/natspec/forcemoveapp/](https://docs.statechannels.org/contract-api/natspec/forcemoveapp/)
+[https://docs.statechannels.org/contract-api/natspec/IForceMoveApp](https://docs.statechannels.org/contract-api/natspec/IForceMoveApp)
 
 ### Medium answer
 
@@ -24,7 +24,7 @@ function validTransition(
 ) external pure returns(bool)
 ```
 
-The `outcome` is an encoding (using the ethereum ABI encoder) of a non-simple type `OutcomItem[]` where `OutcomeItem` is defined [here](https://docs.statechannels.org/contract-api/natspec/Outcome).
+The `outcome` is an encoding (using the ethereum ABI encoder) of a non-simple type `OutcomItem[]` where `OutcomeItem` is defined [here](https://docs.statechannels.org/contract-api/natspec/outcome).
 
 The `appData` is an encoding of an arbitrary solidity data type, designed specifically for the channel's application.
 It is entirely possible for `appData` to always be the null `0x` bytes value.
