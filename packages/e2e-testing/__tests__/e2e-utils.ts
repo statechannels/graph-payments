@@ -19,24 +19,19 @@ export function setupLogging(logFilePath: string): Logger {
   return logger;
 }
 
-let provider: providers.JsonRpcProvider;
-const mine6Blocks = () => _.range(6).forEach(() => provider?.send('evm_mine', []));
+export function mineNBlocks(provider: providers.JsonRpcProvider, n: number) {
+  return (): void => _.range(n).forEach(() => provider?.send('evm_mine', []));
+}
 
-export function setupContractMonitor(rpcEndpoint: string, ethAssetHolderAddress: string): Contract {
-  provider = new providers.JsonRpcProvider(rpcEndpoint);
-  const assetHolder = new Contract(
+export function makeEthAssetHolderContract(
+  provider: providers.JsonRpcProvider,
+  ethAssetHolderAddress: string
+): Contract {
+  return new Contract(
     ethAssetHolderAddress,
     ContractArtifacts.EthAssetHolderArtifact.abi,
     provider
   );
-  assetHolder.on('Deposited', mine6Blocks);
-  assetHolder.on('AllocationUpdated', mine6Blocks);
-  return assetHolder;
-}
-
-export function teardownContractMonitor(assetHolder: Contract): void {
-  assetHolder.off('Deposited', mine6Blocks);
-  assetHolder.off('AllocationUpdated', mine6Blocks);
 }
 
 export const getChannels = async (wallet: ChannelWallet): Promise<ChannelResult[]> =>

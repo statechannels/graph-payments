@@ -7,7 +7,7 @@ import {
   Wallet as ChannelWallet,
   defaultTestConfig
 } from '@statechannels/server-wallet';
-import {Contract} from 'ethers';
+import {Contract, providers} from 'ethers';
 import {Logger} from '@graphprotocol/common-ts';
 
 import {clearExistingChannels, generateAllocationIdAndKeys} from '../src/utils';
@@ -24,11 +24,11 @@ import {createPaymentServer, createReceiptServer} from '../src/external-server';
 import {
   getChannels,
   getChannelsForAllocations,
-  setupContractMonitor,
+  makeEthAssetHolderContract,
+  mineNBlocks,
   setupLogging,
   successfulPayment,
-  syncChannels,
-  teardownContractMonitor
+  syncChannels
 } from './e2e-utils';
 
 configureEnvVariables();
@@ -78,19 +78,25 @@ const receiverConfig = overwriteConfigWithDatabaseConnection(baseConfig, {
 
 // Setup / Teardown callbacks
 let logger: Logger;
-
+let provider: providers.JsonRpcProvider;
 let assetHolder: Contract;
 let paymentWallet: ChannelWallet;
 let receiptWallet: ChannelWallet;
+let mineBlocksFunction: () => void;
 
 beforeAll(async () => {
   logger = setupLogging(LOG_FILE);
 
-  if (process.env.RPC_ENDPOINT /* chain-setup.ts */)
-    assetHolder = setupContractMonitor(
-      process.env.RPC_ENDPOINT,
+  if (process.env.RPC_ENDPOINT /* chain-setup.ts */) {
+    provider = new providers.JsonRpcProvider(process.env.RPC_ENDPOINT);
+    assetHolder = makeEthAssetHolderContract(
+      provider,
       process.env.ETH_ASSET_HOLDER_ADDRESS as string
     );
+    mineBlocksFunction = mineNBlocks(provider, 6);
+    assetHolder.on('Deposited', mineBlocksFunction);
+    assetHolder.on('AllocationUpdated', mineBlocksFunction);
+  }
 
   await DBAdmin.migrateDatabase(payerConfig);
   await DBAdmin.migrateDatabase(receiverConfig);
@@ -114,7 +120,10 @@ afterEach(async () => {
 });
 
 afterAll(async () => {
-  if (process.env.RPC_ENDPOINT /* chain-setup.ts */) teardownContractMonitor(assetHolder);
+  if (process.env.RPC_ENDPOINT /* chain-setup.ts */) {
+    assetHolder.off('Deposited', mineBlocksFunction);
+    assetHolder.off('AllocationUpdated', mineBlocksFunction);
+  }
 
   await paymentWallet.destroy();
   await receiptWallet.destroy();
