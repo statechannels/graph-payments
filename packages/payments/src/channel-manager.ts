@@ -696,6 +696,11 @@ export class ChannelManager implements ChannelManagementAPI {
 
       const {channelResults, outbox} = await this.wallet.createChannels(startState, numChannels);
 
+      if (outbox.length !== 1) {
+        this.logger.error('Unexpected outbox length, expected 1', {channelsToCreate, outbox});
+        throw new Error('Unexpected outbox length, expected 1');
+      }
+
       const channelIds = _.map(channelResults, 'channelId');
 
       this.channelInsights.post(
