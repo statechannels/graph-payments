@@ -694,7 +694,10 @@ export class ChannelManager implements ChannelManagementAPI {
     await pMap(_.chunk(_.range(channelsRequired), 50), async (channelsToCreate) => {
       const numChannels = channelsToCreate.length;
 
-      const {channelResults, outbox} = await this.wallet.createChannels(startState, numChannels);
+      const {channelResults, outbox, newObjectives} = await this.wallet.createChannels(
+        startState,
+        numChannels
+      );
 
       if (outbox.length !== 1) {
         this.logger.error('Unexpected outbox length, expected 1', {channelsToCreate, outbox});
@@ -713,19 +716,16 @@ export class ChannelManager implements ChannelManagementAPI {
         channelIds
       });
 
-      await pMap(outbox, async (msg) => {
-        let channelResults: ChannelResult[];
-        try {
-          channelResults = await this.ensureChannelsOpen(msg);
-        } catch (err) {
-          this.logger.error('Failed to ensure payment channels reached a running / open state', {
-            channelIds,
-            err
-          });
-          return;
-        }
-        await this.insertActiveChannels(channelResults);
-      });
+      try {
+        const readyResults = await this.ensureObjectives(newObjectives, outbox[0]);
+        await this.insertActiveChannels(readyResults);
+      } catch (err) {
+        this.logger.error('Failed to ensure payment channels reached a running / open state', {
+          channelIds,
+          err
+        });
+        return;
+      }
     });
   }
 
