@@ -1,22 +1,16 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import * as fs from 'fs';
-
 import {configureEnvVariables, ETHERLIME_ACCOUNTS} from '@statechannels/devtools';
 import axios from 'axios';
-import _ from 'lodash';
 import {
   DBAdmin,
   overwriteConfigWithDatabaseConnection,
   Wallet as ChannelWallet,
   defaultTestConfig
 } from '@statechannels/server-wallet';
-import {ChannelResult} from '@statechannels/client-api-schema';
-import {BigNumber, providers, Contract} from 'ethers';
-import {ContractArtifacts} from '@statechannels/nitro-protocol';
-import {NULL_APP_DATA} from '@statechannels/wallet-core';
+import {Contract, providers} from 'ethers';
 import {Logger} from '@graphprotocol/common-ts';
 
-import {clearExistingChannels, createTestLogger, generateAllocationIdAndKeys} from '../src/utils';
+import {clearExistingChannels, generateAllocationIdAndKeys} from '../src/utils';
 import {
   PAYER_SERVER_URL,
   RECEIPT_SERVER_DB_NAME,
@@ -27,23 +21,40 @@ import {
 } from '../src/constants';
 import {createPaymentServer, createReceiptServer} from '../src/external-server';
 
+import {
+  getChannels,
+  getChannelsForAllocations,
+  makeEthAssetHolderContract,
+  mineNBlocks,
+  setupLogging,
+  successfulPayment,
+  syncChannels
+} from './e2e-utils';
+
+configureEnvVariables();
+
 // Setup / Configuration
 jest.setTimeout(60_000);
+
 const NUM_ALLOCATIONS = 2;
-configureEnvVariables();
+
 const useLedger = process.env.USE_LEDGER || false;
 const useChain = process.env.FUNDING_STRATEGY === 'Direct';
 const LOG_FILE = `/tmp/e2e-test-${useLedger ? 'with-ledger' : 'without-ledger'}-${
   useChain ? 'with-chain' : 'without-chain'
 }.log`;
-const logFileArg = `--logFile ${LOG_FILE}`;
-const ledgerArg = `--useLedger ${useLedger}`;
-const fundingArg = `--fundingStrategy ${process.env.FUNDING_STRATEGY || 'Fake'}`;
-const threadingArg = `--amountOfWorkerThreads ${process.env.AMOUNT_OF_WORKER_THREADS || 0}`;
-const numAllocationsArg = `--numAllocations ${NUM_ALLOCATIONS}`;
-const serverArgs = [ledgerArg, logFileArg, fundingArg, threadingArg, numAllocationsArg];
+
+const serverArgs = [
+  `--useLedger ${useLedger}`,
+  `--logFile ${LOG_FILE}`,
+  `--fundingStrategy ${process.env.FUNDING_STRATEGY || 'Fake'}`,
+  `--amountOfWorkerThreads ${process.env.AMOUNT_OF_WORKER_THREADS || 0}`,
+  `--numAllocations ${NUM_ALLOCATIONS}`
+];
+
 const gatewayServer = createPaymentServer(serverArgs);
 const indexerServer = createReceiptServer(serverArgs);
+
 const baseConfig = defaultTestConfig({
   networkConfiguration: {
     chainNetworkID: process.env.CHAIN_ID
@@ -56,9 +67,11 @@ const baseConfig = defaultTestConfig({
     pk: ETHERLIME_ACCOUNTS[0].privateKey
   }
 });
+
 const payerConfig = overwriteConfigWithDatabaseConnection(baseConfig, {
   database: PAYER_SERVER_DB_NAME
 });
+
 const receiverConfig = overwriteConfigWithDatabaseConnection(baseConfig, {
   database: RECEIPT_SERVER_DB_NAME
 });
@@ -69,12 +82,25 @@ let provider: providers.JsonRpcProvider;
 let assetHolder: Contract;
 let paymentWallet: ChannelWallet;
 let receiptWallet: ChannelWallet;
+let mineBlocksFunction: () => void;
 
 beforeAll(async () => {
-  setupLogging();
-  setupContractMonitor();
+  logger = setupLogging(LOG_FILE);
+
+  if (process.env.RPC_ENDPOINT /* chain-setup.ts */) {
+    provider = new providers.JsonRpcProvider(process.env.RPC_ENDPOINT);
+    assetHolder = makeEthAssetHolderContract(
+      provider,
+      process.env.ETH_ASSET_HOLDER_ADDRESS as string
+    );
+    mineBlocksFunction = mineNBlocks(provider, 6);
+    assetHolder.on('Deposited', mineBlocksFunction);
+    assetHolder.on('AllocationUpdated', mineBlocksFunction);
+  }
+
   await DBAdmin.migrateDatabase(payerConfig);
   await DBAdmin.migrateDatabase(receiverConfig);
+
   paymentWallet = await ChannelWallet.create(payerConfig);
   receiptWallet = await ChannelWallet.create(receiverConfig);
 });
@@ -94,7 +120,11 @@ afterEach(async () => {
 });
 
 afterAll(async () => {
-  teardownContractMonitor();
+  if (process.env.RPC_ENDPOINT /* chain-setup.ts */) {
+    assetHolder.off('Deposited', mineBlocksFunction);
+    assetHolder.off('AllocationUpdated', mineBlocksFunction);
+  }
+
   await paymentWallet.destroy();
   await receiptWallet.destroy();
 });
@@ -105,7 +135,7 @@ describe('Payment & Receipt Managers E2E', () => {
   test(`Can create and pay with ${NUM_ALLOCATIONS} allocations`, async () => {
     // Make 2 payments per allocation
     const allocations = generateAllocationIdAndKeys(NUM_ALLOCATIONS);
-    const promises = allocations.map(successfulPayment);
+    const promises = allocations.map(() => successfulPayment(PAYER_SERVER_URL));
 
     for (const {status, data} of await Promise.all(promises)) {
       expect(status).toBe(200);
@@ -116,8 +146,8 @@ describe('Payment & Receipt Managers E2E', () => {
         subgraphDeploymentID: TEST_SUBGRAPH_ID.toString()
       });
     }
-    const receiptChannels = await getChannels('receipt');
-    const paymentChannels = await getChannels('payment');
+    const receiptChannels = await getChannels(receiptWallet);
+    const paymentChannels = await getChannels(paymentWallet);
 
     for (const allocationId of allocations.map((a) => a.allocationId)) {
       const receiptChannelsForAllocation = getChannelsForAllocations(receiptChannels, allocationId);
@@ -126,52 +156,57 @@ describe('Payment & Receipt Managers E2E', () => {
 
       expect(receiptChannelsForAllocation).toHaveLength(NUM_ALLOCATIONS);
       expect(paymentChannelsForAllocation).toHaveLength(NUM_ALLOCATIONS);
-      expectChannelsHaveStatus(receiptChannelsForAllocation, 'running');
-      expectChannelsHaveStatus(paymentChannelsForAllocation, 'running');
+
+      for (const {status} of receiptChannelsForAllocation) expect(status).toBe('running');
+      for (const {status} of paymentChannelsForAllocation) expect(status).toBe('running');
     }
   });
 
   test(`Can remove ${NUM_ALLOCATIONS} allocations using syncAllocations`, async () => {
     await axios.post(`${PAYER_SERVER_URL}/syncAllocations`);
 
-    const receiptChannels = await getChannels('receipt');
-    const paymentChannels = await getChannels('payment');
+    const receiptChannels = await getChannels(receiptWallet);
+    const paymentChannels = await getChannels(paymentWallet);
 
-    expectChannelsHaveStatus(receiptChannels, 'closed');
-    expectChannelsHaveStatus(paymentChannels, 'closed');
+    for (const {status} of receiptChannels) expect(status).toBe('closed');
+    for (const {status} of paymentChannels) expect(status).toBe('closed');
   });
 
   test('Payment and Receipt can get back in sync if indexer offline', async () => {
     // The default number of channels per allocation is 2
-    const paymentNotReceived = () => successfulPayment({expectPaymentNotReceived: true});
+    const paymentNotReceived = () =>
+      successfulPayment(PAYER_SERVER_URL, {expectPaymentNotReceived: true});
 
     // Make one successful payment
-    await expect(successfulPayment()).resolves.toMatchObject({status: 200});
+    await expect(successfulPayment(PAYER_SERVER_URL)).resolves.toMatchObject({status: 200});
 
     // Make a payment, but never receive a reply
     await expect(paymentNotReceived()).rejects.toThrowError('Request failed with status code 500');
 
     // Make another successful payment (useable channels is now 1, down from 2)
-    await expect(successfulPayment()).resolves.toMatchObject({status: 200});
+    await expect(successfulPayment(PAYER_SERVER_URL)).resolves.toMatchObject({status: 200});
 
     // Make a payment, but never receive a reply
     await expect(paymentNotReceived()).rejects.toThrowError('Request failed with status code 500');
 
     // With no more channels available, payments start failing
-    await expect(successfulPayment()).rejects.toThrowError('Request failed with status code 406');
+    await expect(successfulPayment(PAYER_SERVER_URL)).rejects.toThrowError(
+      'Request failed with status code 406'
+    );
 
     // Call syncChannels (return to 2 good channels)
-    await expect(syncChannels()).resolves.toMatchObject({status: 200});
+    await expect(syncChannels(PAYER_SERVER_URL)).resolves.toMatchObject({status: 200});
 
     // Make a successful payment (to verify sync channels worked)
-    await expect(successfulPayment()).resolves.toMatchObject({status: 200});
+    await expect(successfulPayment(PAYER_SERVER_URL)).resolves.toMatchObject({status: 200});
   });
 
   test('Payment and Receipt can get back in sync if payer missed receipt', async () => {
-    const receiptNotReceived = () => successfulPayment({expectReceiptNotReceived: true});
+    const receiptNotReceived = () =>
+      successfulPayment(PAYER_SERVER_URL, {expectReceiptNotReceived: true});
 
     // Make one successful payment
-    await expect(successfulPayment()).resolves.toMatchObject({status: 200});
+    await expect(successfulPayment(PAYER_SERVER_URL)).resolves.toMatchObject({status: 200});
 
     // Make a payment, but discard the result (stalling 1 of 2 channels)
     await expect(receiptNotReceived()).rejects.toThrowError('Request failed with status code 500');
@@ -180,73 +215,14 @@ describe('Payment & Receipt Managers E2E', () => {
     await expect(receiptNotReceived()).rejects.toThrowError('Request failed with status code 500');
 
     // With no more channels available, payments start failing
-    await expect(successfulPayment()).rejects.toThrowError('Request failed with status code 406');
+    await expect(successfulPayment(PAYER_SERVER_URL)).rejects.toThrowError(
+      'Request failed with status code 406'
+    );
 
     // Call syncChannels (return to 2 good channels)
-    await expect(syncChannels()).resolves.toMatchObject({status: 200});
+    await expect(syncChannels(PAYER_SERVER_URL)).resolves.toMatchObject({status: 200});
 
     // Make a successful payment (to verify sync channels worked)
-    await expect(successfulPayment()).resolves.toMatchObject({status: 200});
+    await expect(successfulPayment(PAYER_SERVER_URL)).resolves.toMatchObject({status: 200});
   });
 });
-
-// Helpers
-
-function setupLogging() {
-  LOG_FILE && fs.existsSync(LOG_FILE) && fs.truncateSync(LOG_FILE);
-  logger = createTestLogger(LOG_FILE);
-  (logger as any).level = 'debug';
-}
-const mine6Blocks = () => _.range(6).forEach(() => provider?.send('evm_mine', []));
-
-function setupContractMonitor() {
-  if (process.env.RPC_ENDPOINT /* defined in chain-setup.ts */) {
-    provider = new providers.JsonRpcProvider(process.env.RPC_ENDPOINT);
-    assetHolder = new Contract(
-      process.env.ETH_ASSET_HOLDER_ADDRESS as string,
-      ContractArtifacts.EthAssetHolderArtifact.abi,
-      provider
-    );
-    assetHolder.on('Deposited', mine6Blocks);
-    assetHolder.on('AllocationUpdated', mine6Blocks);
-  }
-}
-
-function teardownContractMonitor() {
-  if (process.env.RPC_ENDPOINT /* defined in chain-setup.ts */) {
-    assetHolder.off('Deposited', mine6Blocks);
-    assetHolder.off('AllocationUpdated', mine6Blocks);
-  }
-}
-
-const getChannels = async (database: 'receipt' | 'payment') => {
-  const wallet = database === 'receipt' ? receiptWallet : paymentWallet;
-  // Filter out the ledger channels results
-  return (await wallet.getChannels()).channelResults.filter((c) => c.appData !== NULL_APP_DATA);
-};
-
-const expectChannelsHaveStatus = async (
-  channels: ChannelResult[],
-  status: 'running' | 'closed'
-) => {
-  for (const channel of channels) {
-    expect(channel).toMatchObject({status});
-  }
-};
-// We know the destination of the second allocationItem will be the allocationId
-const getChannelsForAllocations = (channels: ChannelResult[], allocationId: string) =>
-  channels.filter((c) =>
-    BigNumber.from(allocationId).eq(c.allocations[0].allocationItems[1].destination)
-  );
-
-const successfulPayment = (params?: {
-  privateKey?: string;
-  allocationId?: string;
-  expectPaymentNotReceived?: boolean;
-  expectReceiptNotReceived?: boolean;
-}) => {
-  const defaultParams = generateAllocationIdAndKeys(1)[0];
-
-  return axios.get(`${PAYER_SERVER_URL}/sendPayment`, {params: _.merge(defaultParams, params)});
-};
-const syncChannels = () => axios.get(`${PAYER_SERVER_URL}/syncChannels`);
