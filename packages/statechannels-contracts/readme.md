@@ -24,7 +24,7 @@ function validTransition(
 ) external pure returns(bool)
 ```
 
-The `outcome` is an encoding (using the ethereum ABI encoder) of a non-simple type `OutcomItem[]` where `OutcomeItem` is defined [here](https://docs.statechannels.org/contract-api/natspec/outcome).
+The `outcome` is an encoding (using the ethereum ABI encoder) of a non-simple type `OutcomItem[]` where `OutcomeItem` is defined [here](https://docs.statechannels.org/contract-api/natspec/Outcome).
 
 The `appData` is an encoding of an arbitrary solidity data type, designed specifically for the channel's application.
 It is entirely possible for `appData` to always be the null `0x` bytes value.
@@ -76,8 +76,8 @@ The gateway can, in this case, penalize the indexer's stake by _challenging_ the
 
 ## Testing
 
-There is [one positive test case](https://github.com/statechannels/graph-payments/blob/7e545a839cd6cf98ec6a57126e5075e8a3cec9fe/packages/statechannels-contracts/test/attestationStateMachine.test.ts#L158-L161) for each possible (state, event) pair in the happy path.
+There is [one positive test case](https://github.com/statechannels/graph-payments/blob/a995f4bfaa1927f62821bcbd27955beed50875bd/packages/statechannels-contracts/test/attestationApp.test.ts#L175-L182) for each possible (state, event) pair in the happy path.
 
-In addition, there are [some test cases](https://github.com/statechannels/graph-payments/blob/7e545a839cd6cf98ec6a57126e5075e8a3cec9fe/packages/statechannels-contracts/test/attestationStateMachine.test.ts#L218-L225) of invalid transitions.
+In addition, there are [some test cases](https://github.com/statechannels/graph-payments/blob/a995f4bfaa1927f62821bcbd27955beed50875bd/packages/statechannels-contracts/test/attestationApp.test.ts#L200-L207) of invalid transitions.
 
 These are tested against contracts deployed to a local ganache network.
