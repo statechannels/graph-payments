@@ -200,7 +200,9 @@ export class FakeIndexer {
     return serializeState(signedState);
   }
 
-  public goOffline(): void {
+  private numMessagesToThrow = -1;
+  public goOffline(forNMessages = -1): void {
+    this.numMessagesToThrow = forNMessages;
     this.logger?.debug(`FakeIndexer offline`);
     this.online = false;
   }
@@ -208,10 +210,18 @@ export class FakeIndexer {
   public goOnline(): void {
     this.logger?.debug(`FakeIndexer online`);
     this.online = true;
+    this.numMessagesToThrow = -1;
   }
 
   private throwIfOffline() {
-    if (!this.online) throw new Error('FakeIndexer is offline');
+    if (this.numMessagesToThrow === 0) {
+      this.goOnline();
+    }
+
+    if (!this.online) {
+      this.numMessagesToThrow -= 1;
+      throw new Error(`FakeIndexer is offline for ${this.numMessagesToThrow} more messages`);
+    }
   }
 
   public block(): void {
