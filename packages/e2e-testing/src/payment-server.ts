@@ -169,7 +169,11 @@ const createTasks = (logger: Logger) => ({
           provider: process.env.RPC_ENDPOINT,
           pk: ETHERLIME_ACCOUNTS[0].privateKey
         }
-      })
+      }),
+      backoffStrategy: {
+        numAttempts: 1,
+        initialDelay: 50
+      }
     });
 
     const testAllocations = generateAllocations(numAllocations);

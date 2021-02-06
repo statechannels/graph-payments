@@ -62,6 +62,7 @@ const cmDefaultOpts: Pick<
   | 'fundsPerAllocation'
   | 'walletConfig'
   | 'cache'
+  | 'backoffStrategy'
 > = {
   logger,
   contracts: mockContracts,
@@ -69,7 +70,11 @@ const cmDefaultOpts: Pick<
   paymentChannelFundingAmount: BN.from(1_000_000_000),
   fundsPerAllocation: BN.from(1_000_000_000_000),
   walletConfig,
-  cache
+  cache,
+  backoffStrategy: {
+    initialDelay: 50,
+    numAttempts: 1
+  }
 };
 
 type MessageSender = ChannelManagerOptions['messageSender'];

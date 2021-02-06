@@ -63,6 +63,11 @@ export interface ChannelManagerOptions {
      */
     paymentChannel?: number;
   };
+
+  backoffStrategy: {
+    initialDelay: number;
+    numAttempts: number;
+  };
 }
 const DEFAULT_LEDGER_CHALLENGE_TIMEOUT = 3_600_000; // One hour
 const DEFAULT_PAYMENT_CHALLENGE_TIMEOUT = 600_000; // 10 minutes
@@ -171,11 +176,16 @@ export class ChannelManager implements ChannelManagementAPI {
     );
   }
 
+  private backoffIntervals: number[];
+
   constructor(wallet: ChannelWallet, opts: ChannelManagerOptions) {
     this.wallet = wallet;
     this.destinationAddress = opts.destinationAddress;
     this.fundsPerAllocation = BN.from(opts.fundsPerAllocation);
     this.paymentChannelFundingAmount = BN.from(opts.paymentChannelFundingAmount);
+    this.backoffIntervals = _.range(opts.backoffStrategy.numAttempts).map(
+      (i) => opts.backoffStrategy.initialDelay * 2 ** i
+    );
 
     if (BN.gt(this.paymentChannelFundingAmount, this.fundsPerAllocation))
       throw new Error(
@@ -427,7 +437,7 @@ export class ChannelManager implements ChannelManagementAPI {
     const results = await this.exchangeMessagesUntilOutboxIsEmpty(initialMessage);
     const latestResult = new Map(results.map((c) => [c.channelId, c]));
 
-    for (const retryTimeoutMs of [2_500, 5_000, 10_000, 20_000, 40_000]) {
+    for (const retryTimeoutMs of this.backoffIntervals) {
       if (remaining.size === 0) return Array.from(latestResult.values());
 
       await delay(retryTimeoutMs);
