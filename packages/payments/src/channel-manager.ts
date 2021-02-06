@@ -14,6 +14,7 @@ import {getAttestionAppByteCode} from '@graphprotocol/statechannels-contracts';
 import {Evt} from 'evt';
 import {BigNumber} from 'ethers';
 import AsyncLock from 'async-lock';
+import {DBObjective} from '@statechannels/server-wallet/lib/src/models/objective';
 
 import {
   summariseResponse,
@@ -398,6 +399,46 @@ export class ChannelManager implements ChannelManagementAPI {
       // TODO: The gateway should probably choose a participantId based on its instance
       participantId: signingAddress
     };
+  }
+
+  /**
+   *
+   * @param objectiveIds objectiveIds to sync on
+   * @param message initial message to send to indexer
+   *
+   * 1. exchanges messages until outbox is empty
+   * 2. if any objectives have not finished, waits for a period of time,
+   *    and then sync the in progress objectives
+   */
+  private async ensureObjectives(
+    objectives: DBObjective[],
+    initialMessage: Outgoing
+  ): Promise<ChannelResult[]> {
+    const remaining = new Map(objectives.map((o) => [o.objectiveId, o]));
+
+    objectives.map(({objectiveId}) =>
+      this.wallet.on('objectiveSucceeded', (o) => {
+        if (o.objectiveId === objectiveId) {
+          remaining.delete(objectiveId);
+        }
+      })
+    );
+
+    const results = await this.exchangeMessagesUntilOutboxIsEmpty(initialMessage);
+    const latestResult = new Map(results.map((c) => [c.channelId, c]));
+
+    for (const retryTimeoutMs of [2_500, 5_000, 10_000, 20_000, 40_000]) {
+      if (remaining.size === 0) return Array.from(latestResult.values());
+
+      await delay(retryTimeoutMs);
+
+      const newResults = await this._syncChannels(
+        Array.from(remaining.values()).map((o) => o.data.targetChannelId)
+      );
+      newResults.map((c) => latestResult.set(c.channelId, c));
+    }
+
+    throw new Error('Unable to ensure objectives');
   }
 
   /**
