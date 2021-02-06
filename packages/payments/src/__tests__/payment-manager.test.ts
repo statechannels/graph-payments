@@ -271,7 +271,8 @@ describe('ChannelManager', () => {
     await channelManager.syncAllocations([request(fakeIndexer.allocation(allocationId))]);
     expect(await channelManager.activeChannelCount(allocationId)).toEqual(0);
 
-    fakeIndexer.goOnline();
+    // Test that ensureObjective works when one outgoing message is dropped
+    fakeIndexer.goOffline(1);
     const paymentManager = await TestPaymentManager.create({
       walletConfig,
       logger,
