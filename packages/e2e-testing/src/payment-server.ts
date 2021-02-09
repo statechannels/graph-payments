@@ -177,9 +177,11 @@ const createTasks = (logger: Logger) => ({
     logger.info('Setting up channels for allocations', {
       allocationIds: testAllocations.map((x) => x.id)
     });
+
     await channelManager.ensureAllocations(
       testAllocations.map((allocation) => ({allocation, num: channelsPerAllocation, type: 'SetTo'}))
     );
+
     logger.info('Channels set up', {
       allocationIds: testAllocations.map((x) => x.id)
     });
