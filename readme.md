@@ -1,4 +1,4 @@
-# StateChannels / The Graph
+# StateChannels / The Graph <a href="https://circleci.com/gh/statechannels/graph-payments/tree/main"><img src="https://circleci.com/gh/statechannels/graph-payments/tree/main.svg?style=shield" alt="circleci"></a>
 
 In this repository, you will find three main components and some testing infrastructure:
 
