@@ -5,8 +5,10 @@
   "dependencies": {
     "@graphprotocol/common-ts": "1.0.1",
     "@openzeppelin/contracts": "3.2.2-solc-0.7",
-    "@statechannels/client-api-schema": "0.9.0",
-    "@statechannels/wallet-core": "0.12.0",
+    "@statechannels/client-api-schema": "0.5.2-next.517ed467a.549",
+    "@statechannels/devtools": "0.5.2-next.517ed467a.549",
+    "@statechannels/nitro-protocol": "0.11.2-next.517ed467a.543",
+    "@statechannels/wallet-core": "0.9.13-next.517ed467a.543",
     "lodash": "4.17.20"
   },
   "devDependencies": {
