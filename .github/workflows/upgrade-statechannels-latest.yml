@@ -1,7 +1,5 @@
 name: Upgrade statechannels packages to @latest tag
 on:
-  schedule:
-    - cron: '0 8 * * *'
   # enable users to manually trigger with workflow_dispatch
   workflow_dispatch: {}
 
