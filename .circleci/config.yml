@@ -23,6 +23,17 @@ restore_dep: &restore_dep
     key: v0-dependency-cache-{{ checksum "yarn.lock" }}
 
 commands:
+  log_stats:
+    description: 'Log stats '
+    parameters:
+      file:
+        type: string
+        default: stats
+    steps:
+      - run:
+          command: bash bin/log_memory.sh <<parameters.file>>
+          background: true
+
   install_postgresql_client:
     description: 'Install postgresql client'
     steps:
@@ -136,6 +147,8 @@ jobs:
 
     steps:
       - checkout
+      - log_stats:
+          file: e2e-stats
       - attach_workspace:
           at: ~/project
       - install_postgresql_client
