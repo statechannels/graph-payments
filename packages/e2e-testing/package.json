@@ -34,6 +34,7 @@
     "ethers": "^5.0.9",
     "express": "^4.17.1",
     "jest": "26.1.0",
+    "leaked-handles": "^5.2.0",
     "lodash": "^4.17.20",
     "pg": "^8.3.3",
     "pgtools": "0.3.0",

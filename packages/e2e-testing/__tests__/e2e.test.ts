@@ -1,3 +1,10 @@
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+require('leaked-handles').set({
+  fullStack: true, // use full stack traces
+  timeout: 30000, // run every 30 seconds instead of 5.
+  debugSockets: true // pretty print tcp thrown exceptions.
+});
+
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import {configureEnvVariables, ETHERLIME_ACCOUNTS} from '@statechannels/devtools';
 import axios from 'axios';
