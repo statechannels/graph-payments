@@ -13,8 +13,8 @@ jobs:
           # pulls all commits and tags (needed for lerna / semantic release to correctly version)
           fetch-depth: 0
 
-      - name: Check that we're on master
-        if: github.ref != 'refs/heads/master'
+      - name: Check that we're on main
+        if: github.ref != 'refs/heads/main'
         run: exit 1
 
       - uses: actions/setup-node@v1
@@ -47,7 +47,7 @@ jobs:
       - name: Create Pull Request
         uses: peter-evans/create-pull-request@v3
         with:
-          branch: update-master-with-published-versions
+          branch: update-main-with-published-versions
           title: Updates published versions [please merge ASAP]
           body: Updates to the versions and changelogs created by the `Publish Packages` action
 
