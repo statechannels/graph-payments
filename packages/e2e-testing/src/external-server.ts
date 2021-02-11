@@ -41,6 +41,7 @@ class ExternalServer {
       if (typeof this.serverProcess === 'undefined') reject('Process not started');
       else {
         this.serverProcess.on('exit', resolve);
+        console.log('sending %s to server with pid %i', signal, this.serverProcess.pid);
         kill(this.serverProcess.pid, signal);
       }
     });

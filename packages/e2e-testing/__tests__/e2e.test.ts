@@ -123,7 +123,9 @@ beforeEach(async () => {
 });
 
 afterEach(async () => {
+  console.log('stopping servers');
   await Promise.all([gatewayServer.stop(), indexerServer.stop()]);
+  console.log('servers stopped');
 });
 
 afterAll(async () => {
