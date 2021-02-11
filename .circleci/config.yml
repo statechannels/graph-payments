@@ -42,7 +42,7 @@ commands:
         default: memory-usage.txt
     steps:
       - store_artifacts:
-          path: /home/circleci/<< parameters.file >>.txt
+          path: /root/<< parameters.file >>.txt
           destination: << parameters.file >>
 
 
