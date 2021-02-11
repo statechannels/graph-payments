@@ -448,6 +448,7 @@ export class ChannelManager implements ChannelManagementAPI {
       newResults.map((c) => latestResult.set(c.channelId, c));
     }
 
+    this.logger.error('Unable to ensure objectives', {remaining: Array.from(remaining.keys())});
     throw new Error('Unable to ensure objectives');
   }
 
