@@ -17,9 +17,9 @@
   "dependencies": {
     "@graphprotocol/common-ts": "1.0.1",
     "@graphprotocol/statechannels-contracts": "0.0.1",
-    "@statechannels/client-api-schema": "0.9.0",
-    "@statechannels/server-wallet": "1.20.0",
-    "@statechannels/wallet-core": "0.12.0",
+    "@statechannels/client-api-schema": "0.10.0",
+    "@statechannels/server-wallet": "1.21.0",
+    "@statechannels/wallet-core": "0.13.0",
     "ethers": "^5.0.9",
     "lodash": "^4.17.20"
   },
