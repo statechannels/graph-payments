@@ -43,6 +43,8 @@ configureEnvVariables();
 // Setup / Configuration
 jest.setTimeout(60_000);
 
+setTimeout(() => process.exit(1), 180_000);
+
 const NUM_ALLOCATIONS = 2;
 
 const useLedger = process.env.USE_LEDGER || false;
