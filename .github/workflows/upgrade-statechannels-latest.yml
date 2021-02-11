@@ -1,0 +1,51 @@
+name: Upgrade statechannels packages to @latest tag
+on:
+  schedule:
+    - cron: '0 8 * * *'
+  # enable users to manually trigger with workflow_dispatch
+  workflow_dispatch: {}
+
+jobs:
+  update-statechannels-packages-to-latest:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out source code
+        uses: actions/checkout@v2
+
+      - name: Check that we're on main
+        if: github.ref != 'refs/heads/main'
+        run: exit 1
+
+      - uses: actions/setup-node@v1
+        with:
+          node-version: 12.16.3
+
+      - uses: actions/cache@v2
+        with:
+          path: '**/node_modules'
+          key: ${{ runner.os }}-yarn-cache-v2-${{ hashFiles('yarn.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-yarn-cache-v2-
+
+      - name: yarn install
+        env:
+          SKIP_PREPARE: true # the upgrades may well prevent our packages compiling
+        run: |
+          yarn workspace @graphprotocol/payments upgrade @statechannels/server-wallet@latest @statechannels/client-api-schema@latest @statechannels/wallet-core@latest -E
+          yarn workspace @graphprotocol/receipts upgrade @statechannels/server-wallet@latest @statechannels/client-api-schema@latest @statechannels/wallet-core@latest -E
+          yarn workspace @graphprotocol/statechannels-contracts upgrade @statechannels/devtools@latest @statechannels/nitro-protocol@latest @statechannels/client-api-schema@latest @statechannels/wallet-core@latest -E
+          yarn workspace e2e-testing add @statechannels/devtools@latest @statechannels/server-wallet@latest @statechannels/client-api-schema@latest @statechannels/wallet-core@latest -D -E
+          yarn
+
+      - name: Configure CI Git User
+        run: |
+          git config --global user.name "github-actions"
+          git config --global user.email "github-actions@users.noreply.github.com"
+
+      - name: Create Pull Request
+        uses: peter-evans/create-pull-request@v3
+        with:
+          branch: upgrade-statechannels-pkgs
+          title: Upgrade @statechannels packages to @latest tag
+          body: This PR was created automatically by a github action.
+          commit-message: upgrade statechannels packages to latest tag
