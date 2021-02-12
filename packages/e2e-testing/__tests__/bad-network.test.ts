@@ -109,20 +109,14 @@ describe('Payment & Receipt Managers E2E', () => {
     await syncAllocations(PAYER_SERVER_URL, {
       requests: allocations.map((allocation) => ({
         allocation: {
+          ...allocation,
           id: allocation.id,
-          indexer: {
-            id: allocation.indexer.id,
-            url: allocation.indexer.url,
-            stakedTokens: allocation.indexer.stakedTokens
-          },
           subgraphDeploymentID: {
             ...allocation.subgraphDeploymentID,
-            display: allocation.subgraphDeploymentID.display,
-            ipfsHash: allocation.subgraphDeploymentID.ipfsHash,
-            bytes32: allocation.subgraphDeploymentID.bytes32
-          },
-          allocatedTokens: allocation.allocatedTokens,
-          createdAtEpoch: allocation.createdAtEpoch
+            display: allocation.subgraphDeploymentID.display, // getter
+            ipfsHash: allocation.subgraphDeploymentID.ipfsHash, // getter
+            bytes32: allocation.subgraphDeploymentID.bytes32 // getter
+          }
         },
         num: NUM_ALLOCATIONS,
         type: 'SetTo'
