@@ -103,7 +103,7 @@ afterAll(async () => {
 });
 
 describe('Payment & Receipt Managers E2E', () => {
-  test.only(`Can create channels and make 20 payments`, async () => {
+  test(`Can create channels and make 20 payments`, async () => {
     const allocations = generateAllocations(NUM_ALLOCATIONS);
 
     await syncAllocations(PAYER_SERVER_URL, {
