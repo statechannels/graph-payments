@@ -36,7 +36,7 @@ const serverArgs = [
   `--amountOfWorkerThreads ${process.env.AMOUNT_OF_WORKER_THREADS || 0}`,
   `--channelsPerAllocation 5`,
   `--dropIncomingRate 0.03`, // 3% chance incoming messages are dropped
-  `--dropOutgoingRate 0.03`, // 3% chance outgoing messages are dropped
+  `--dropOutgoingRate 0`, // 0% chance outgoing messages are dropped
   `--fundingStrategy Fake`,
   `--logFile ${LOG_FILE}`,
   `--meanDelay 15`, // Mean 15ms delay between message send and receive (distribution)
