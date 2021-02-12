@@ -295,18 +295,30 @@ export class ChannelManager implements ChannelManagementAPI {
       {concurrency: 10}
     );
 
-    const resumedChannels = _.compact(_.flatMapDeep(results));
+    const channelResults = _.compact(_.flatMapDeep(results));
 
     this.channelInsights.post(
-      Insights.channelEvent('ChannelsSynced', resumedChannels.map(extractSnapshot))
+      Insights.channelEvent('ChannelsSynced', channelResults.map(extractSnapshot))
     );
 
-    this.logger.debug(`Resumed stalled channels successfully`, {
-      numChannels: resumedChannels.length,
-      channels: resumedChannels.map((c) => c.channelId)
-    });
+    const [resumedChannels, stillStalled] = _.partition(
+      channelResults,
+      (channelResult) => channelResult.turnNum % 2 === 1 && channelResult.turnNum >= 3
+    );
 
-    return resumedChannels;
+    if (resumedChannels.length)
+      this.logger.debug(`Resumed stalled channels successfully`, {
+        numChannels: resumedChannels.length,
+        channels: resumedChannels.map((c) => c.channelId)
+      });
+
+    if (stillStalled.length)
+      this.logger.debug(`Some channels still stalled after syncing attempt`, {
+        numChannels: stillStalled.length,
+        channels: stillStalled.map((c) => c.channelId)
+      });
+
+    return channelResults;
   }
 
   public async removeAllocations(allocationIds: string[]): Promise<void> {
