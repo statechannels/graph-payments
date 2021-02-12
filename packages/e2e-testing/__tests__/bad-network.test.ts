@@ -10,7 +10,7 @@ import {
 } from '@statechannels/server-wallet';
 import {Logger} from '@graphprotocol/common-ts';
 
-import {clearExistingChannels, generateAllocationIdAndKeys} from '../src/utils';
+import {clearExistingChannels, generateAllocations} from '../src/utils';
 import {RECEIPT_SERVER_DB_NAME, PAYER_SERVER_DB_NAME, PAYER_SERVER_URL} from '../src/constants';
 import {createPaymentServer, createReceiptServer} from '../src/external-server';
 
@@ -19,7 +19,8 @@ import {
   getChannelsForAllocations,
   setupLogging,
   successfulPayment,
-  syncChannels
+  syncChannels,
+  syncAllocations
 } from './e2e-utils';
 
 // Setup / Configuration
@@ -29,6 +30,8 @@ configureEnvVariables();
 
 const LOG_FILE = `/tmp/bad-network-test-without-chain.log`;
 
+const NUM_ALLOCATIONS = 5;
+
 const serverArgs = [
   `--amountOfWorkerThreads ${process.env.AMOUNT_OF_WORKER_THREADS || 0}`,
   `--channelsPerAllocation 5`,
@@ -37,12 +40,16 @@ const serverArgs = [
   `--fundingStrategy Fake`,
   `--logFile ${LOG_FILE}`,
   `--meanDelay 15`, // Mean 15ms delay between message send and receive (distribution)
-  `--numAllocations 5`,
   `--useLedger true`
 ];
 
 const gatewayServer = createPaymentServer(serverArgs);
-const indexerServer = createReceiptServer(serverArgs);
+const indexerServer = createReceiptServer([
+  ...serverArgs,
+  // receipt-server uses numAllocations field to pre-compute private
+  // keys for attestation signing but no action is taken on startup
+  `--numAllocations ${NUM_ALLOCATIONS}`
+]);
 
 const baseConfig = defaultTestConfig({
   networkConfiguration: {
@@ -97,18 +104,41 @@ afterAll(async () => {
 
 describe('Payment & Receipt Managers E2E', () => {
   test.only(`Can create channels and make 20 payments`, async () => {
-    const allocations = generateAllocationIdAndKeys(5);
+    const allocations = generateAllocations(NUM_ALLOCATIONS);
+
+    await syncAllocations(PAYER_SERVER_URL, {
+      requests: allocations.map((allocation) => ({
+        allocation: {
+          id: allocation.id,
+          indexer: {
+            id: allocation.indexer.id,
+            url: allocation.indexer.url,
+            stakedTokens: allocation.indexer.stakedTokens
+          },
+          subgraphDeploymentID: {
+            ...allocation.subgraphDeploymentID,
+            display: allocation.subgraphDeploymentID.display,
+            ipfsHash: allocation.subgraphDeploymentID.ipfsHash,
+            bytes32: allocation.subgraphDeploymentID.bytes32
+          },
+          allocatedTokens: allocation.allocatedTokens,
+          createdAtEpoch: allocation.createdAtEpoch
+        },
+        num: NUM_ALLOCATIONS,
+        type: 'SetTo'
+      }))
+    });
 
     const receiptChannels = await getChannels(receiptWallet);
     const paymentChannels = await getChannels(paymentWallet);
 
-    for (const allocationId of _.map(allocations, 'allocationId')) {
+    for (const allocationId of _.map(allocations, 'id')) {
       const receiptChannelsForAllocation = getChannelsForAllocations(receiptChannels, allocationId);
 
       const paymentChannelsForAllocation = getChannelsForAllocations(paymentChannels, allocationId);
 
-      expect(receiptChannelsForAllocation).toHaveLength(5);
-      expect(paymentChannelsForAllocation).toHaveLength(5);
+      expect(receiptChannelsForAllocation).toHaveLength(NUM_ALLOCATIONS);
+      expect(paymentChannelsForAllocation).toHaveLength(NUM_ALLOCATIONS);
 
       for (const {status} of receiptChannelsForAllocation) expect(status).toBe('running');
       for (const {status} of paymentChannelsForAllocation) expect(status).toBe('running');
@@ -118,14 +148,14 @@ describe('Payment & Receipt Managers E2E', () => {
     let numPayments = 0;
 
     while (numPayments < 20) {
-      // try {
-      await syncChannels(PAYER_SERVER_URL);
-      const {status} = await successfulPayment(PAYER_SERVER_URL);
-      if (status === 200) numPayments++;
-      // } catch (err) {
-      //   logger.trace('Payment failed', {err});
-      //   continue;
-      // }
+      try {
+        await syncChannels(PAYER_SERVER_URL);
+        const {status} = await successfulPayment(PAYER_SERVER_URL);
+        if (status === 200) numPayments++;
+      } catch (err) {
+        if (err.toString() === 'Request failed with status code 500') continue;
+        throw err;
+      }
     }
 
     expect(numPayments).toBeGreaterThanOrEqual(20);
