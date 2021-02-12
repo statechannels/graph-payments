@@ -142,14 +142,9 @@ describe('Payment & Receipt Managers E2E', () => {
     let numPayments = 0;
 
     while (numPayments < 20) {
-      try {
-        await syncChannels(PAYER_SERVER_URL);
-        const {status} = await successfulPayment(PAYER_SERVER_URL);
-        if (status === 200) numPayments++;
-      } catch (err) {
-        if (err.toString() === 'Request failed with status code 500') continue;
-        throw err;
-      }
+      await syncChannels(PAYER_SERVER_URL);
+      const {status} = await successfulPayment(PAYER_SERVER_URL);
+      if (status === 200) numPayments++;
     }
 
     expect(numPayments).toBeGreaterThanOrEqual(20);
