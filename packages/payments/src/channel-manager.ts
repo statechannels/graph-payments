@@ -426,6 +426,11 @@ export class ChannelManager implements ChannelManagementAPI {
 
       if (_.values(notRunning).length === 0) return _.values(running);
 
+      this.logger.debug('Channels not yet opened, will try syncing after a timeout', {
+        notRunningChannelIds: _.map(notRunning, 'channelId'),
+        retryTimeoutMs
+      });
+
       await delay(retryTimeoutMs);
 
       results = await this._syncChannels(_.keys(notRunning));
