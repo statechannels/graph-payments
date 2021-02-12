@@ -110,9 +110,10 @@ describe('Payment & Receipt Managers E2E', () => {
       requests: allocations.map((allocation) => ({
         allocation: {
           ...allocation,
-          id: allocation.id,
           subgraphDeploymentID: {
             ...allocation.subgraphDeploymentID,
+            // The next three properties are getters on the SubgraphDeploymentID type
+            // and thus are serialized explicitly here to be sent over the HTTP req
             display: allocation.subgraphDeploymentID.display, // getter
             ipfsHash: allocation.subgraphDeploymentID.ipfsHash, // getter
             bytes32: allocation.subgraphDeploymentID.bytes32 // getter
