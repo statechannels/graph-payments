@@ -177,9 +177,11 @@ const createTasks = (logger: Logger) => ({
     logger.info('Setting up channels for allocations', {
       allocationIds: testAllocations.map((x) => x.id)
     });
+
     await channelManager.ensureAllocations(
       testAllocations.map((allocation) => ({allocation, num: channelsPerAllocation, type: 'SetTo'}))
     );
+
     logger.info('Channels set up', {
       allocationIds: testAllocations.map((x) => x.id)
     });
@@ -302,14 +304,22 @@ function startApp(
           indexer: joi
             .object({
               url: joi.string().required(),
-              id: joi.string().required()
+              id: joi.string().required(),
+              stakedTokens: joi.object().required(),
+              createdAt: joi.number().optional()
             })
             .required(),
           subgraphDeploymentID: joi
             .object({
-              bytes32: joi.string().required()
+              display: joi.object().optional(),
+              ipfsHash: joi.string().optional(),
+              bytes32: joi.string().required(),
+              value: joi.string().required(),
+              kind: joi.equal('deployment-id')
             })
-            .required()
+            .required(),
+          allocatedTokens: joi.object().required(),
+          createdAtEpoch: joi.number().required()
         })
         .required(),
       type: joi.string().required(),

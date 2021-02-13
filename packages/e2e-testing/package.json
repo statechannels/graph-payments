@@ -56,6 +56,7 @@
     "test": "yarn test:e2e",
     "test:e2e:chain": "FUNDING_STRATEGY=Direct jest -c ./jest.chain.config.js e2e.test.ts --ci --runInBand",
     "test:e2e": "FUNDING_STRATEGY=Fake jest e2e.test.ts --ci --runInBand",
+    "test:badnetwork": "FUNDING_STRATEGY=Fake jest bad-network.test.ts --ci --runInBand",
     "test:stress:chain": "FUNDING_STRATEGY=Direct jest -c ./jest.chain.config.js stress.test.ts --ci",
     "test:stress": "FUNDING_STRATEGY=Fake jest stress.test.ts --ci",
     "lint:check": "eslint . --ext .ts --cache",

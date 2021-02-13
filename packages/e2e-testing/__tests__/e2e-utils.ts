@@ -9,6 +9,7 @@ import {providers, Contract} from 'ethers';
 import {ContractArtifacts} from '@statechannels/nitro-protocol';
 import {BN, NULL_APP_DATA} from '@statechannels/wallet-core';
 import {Logger} from '@graphprotocol/common-ts';
+import {EnsureAllocationRequest} from '@graphprotocol/payments/src/channel-manager';
 
 import {createTestLogger, generateAllocationIdAndKeys} from '../src/utils';
 
@@ -61,3 +62,10 @@ export const successfulPayment = (
 
 export const syncChannels = (payerServerUrl: string): Promise<{status: number}> =>
   axios.get(`${payerServerUrl}/syncChannels`);
+
+export const syncAllocations = (
+  payerServerUrl: string,
+  params?: {
+    requests: EnsureAllocationRequest[];
+  }
+): Promise<{status: number}> => axios.post(`${payerServerUrl}/syncAllocations`, params);
