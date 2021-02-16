@@ -742,7 +742,6 @@ export class ChannelManager implements ChannelManagementAPI {
   }
 
   public async closeRetired(): Promise<void> {
-    // select channels that are both retired and our turn
     const groupedChannelIds = await this.cache.closableChannels();
 
     await pMap(
