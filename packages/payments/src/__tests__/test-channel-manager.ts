@@ -11,7 +11,7 @@ export class TestChannelManager extends ChannelManager {
     const ret = await this.cache.getLedgerChannels(allocationId);
     return ret.length > 0;
   }
-  constructor(wallet: Wallet, opts: ChannelManagerOptions) {
+  constructor(public wallet: Wallet, opts: ChannelManagerOptions) {
     super(wallet, opts);
   }
   static async create(opts: ChannelManagerOptions): Promise<TestChannelManager> {

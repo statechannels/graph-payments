@@ -102,7 +102,7 @@ export type ChannelManagementAPI = {
 
 export class ChannelManager implements ChannelManagementAPI {
   private logger: Logger;
-  private wallet: ChannelWallet;
+  protected wallet: ChannelWallet;
   private destinationAddress: string;
   protected cache: ChannelCache;
   private fundsPerAllocation: Uint256;
