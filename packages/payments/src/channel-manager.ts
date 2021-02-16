@@ -8,7 +8,11 @@ import {
   Wallet as ChannelWallet,
   IncomingServerWalletConfig as WalletConfig
 } from '@statechannels/server-wallet';
-import {ChannelResult, Participant} from '@statechannels/client-api-schema';
+import {
+  ChannelResult,
+  MessageQueuedNotification,
+  Participant
+} from '@statechannels/client-api-schema';
 import _ from 'lodash';
 import {getAttestionAppByteCode} from '@graphprotocol/statechannels-contracts';
 import {Evt} from 'evt';
@@ -99,6 +103,8 @@ export type ChannelManagementAPI = {
   channelsRetired: Evt<Insights.ChannelsRetired>;
   channelsClosed: Evt<Insights.ChannelsClosed>;
 };
+
+type Outbox = Pick<MessageQueuedNotification, 'method' | 'params'>[];
 
 export class ChannelManager implements ChannelManagementAPI {
   private logger: Logger;
@@ -422,7 +428,7 @@ export class ChannelManager implements ChannelManagementAPI {
    */
   private async ensureObjectives(
     objectives: DBObjective[],
-    initialMessage: Outgoing
+    initialOutbox: Outbox
   ): Promise<ChannelResult[]> {
     const remaining = new Map(objectives.map((o) => [o.objectiveId, o]));
 
@@ -438,7 +444,13 @@ export class ChannelManager implements ChannelManagementAPI {
 
     this.wallet.on('objectiveSucceeded', onObjectiveSucceded);
 
-    const results = await this.exchangeMessagesUntilOutboxIsEmpty(initialMessage);
+    const compoundResults = await pMap(
+      initialOutbox,
+      async (message) => this.exchangeMessagesUntilOutboxIsEmpty(message),
+      {concurrency: 6}
+    );
+    const results = _.flatten(compoundResults);
+
     const latestResult = new Map(results.map((c) => [c.channelId, c]));
 
     for (const retryTimeoutMs of this.backoffIntervals) {
@@ -705,11 +717,6 @@ export class ChannelManager implements ChannelManagementAPI {
         numChannels
       );
 
-      if (outbox.length !== 1) {
-        this.logger.error('Unexpected outbox length, expected 1', {channelsToCreate, outbox});
-        throw new Error('Unexpected outbox length, expected 1');
-      }
-
       const channelIds = _.map(channelResults, 'channelId');
 
       this.channelInsights.post(
@@ -723,7 +730,7 @@ export class ChannelManager implements ChannelManagementAPI {
       });
 
       try {
-        const readyResults = await this.ensureObjectives(newObjectives, outbox[0]);
+        const readyResults = await this.ensureObjectives(newObjectives, outbox);
         await this.insertActiveChannels(readyResults);
       } catch (err) {
         this.logger.error('Failed to ensure payment channels reached a running / open state', {
