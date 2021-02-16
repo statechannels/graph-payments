@@ -426,13 +426,13 @@ export class ChannelManager implements ChannelManagementAPI {
   ): Promise<ChannelResult[]> {
     const remaining = new Map(objectives.map((o) => [o.objectiveId, o]));
 
-    objectives.map(({objectiveId}) =>
-      this.wallet.on('objectiveSucceeded', (o) => {
-        if (o.objectiveId === objectiveId) {
-          remaining.delete(objectiveId);
-        }
-      })
-    );
+    const onObjectiveSucceded = (o: DBObjective) => {
+      if (o.objectiveId === o.objectiveId) {
+        remaining.delete(o.objectiveId);
+      }
+    };
+
+    this.wallet.on('objectiveSucceeded', onObjectiveSucceded);
 
     const results = await this.exchangeMessagesUntilOutboxIsEmpty(initialMessage);
     const latestResult = new Map(results.map((c) => [c.channelId, c]));
