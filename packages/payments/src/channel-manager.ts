@@ -395,9 +395,8 @@ export class ChannelManager implements ChannelManagementAPI {
     if (channelIds.length > 0) {
       this.logger.debug('Closing ledger channels', {channelIds});
 
-      const {outbox} = await this.wallet.closeChannels(channelIds);
-
-      await pMap(outbox, (msg) => this.exchangeMessagesUntilOutboxIsEmpty(msg));
+      const {outbox, newObjectives} = await this.wallet.closeChannels(channelIds);
+      await this.ensureObjectives(newObjectives, outbox);
 
       await this.cache.removeLedgerChannels(channelIds);
 
