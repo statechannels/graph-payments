@@ -270,6 +270,7 @@ describe('ChannelManager', () => {
     // sync allocations
     await channelManager.syncAllocations([request(fakeIndexer.allocation(allocationId))]);
     expect(await channelManager.activeChannelCount(allocationId)).toEqual(0);
+    // expect(channelManager.wallet.listenerCount('objectiveSucceeded')).toEqual(0);
 
     // Test that ensureObjective works when one outgoing message is dropped
     fakeIndexer.goOffline(1);
@@ -287,6 +288,7 @@ describe('ChannelManager', () => {
     const channelManager2 = await TestChannelManager.create({...cmDefaultOpts, messageSender});
     expect((await paymentWallet.getChannels()).channelResults).toHaveLength(2);
     await channelManager2.syncAllocations([request(fakeIndexer.allocation(allocationId))]);
+    expect(channelManager2.wallet.listenerCount('objectiveSucceeded')).toEqual(0);
 
     // check it has created the correct payers
     expect(await channelManager2.activeChannelCount(allocationId)).toEqual(2);
