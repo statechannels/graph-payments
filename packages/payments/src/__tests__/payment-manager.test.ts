@@ -270,7 +270,7 @@ describe('ChannelManager', () => {
     // sync allocations
     await channelManager.syncAllocations([request(fakeIndexer.allocation(allocationId))]);
     expect(await channelManager.activeChannelCount(allocationId)).toEqual(0);
-    // expect(channelManager.wallet.listenerCount('objectiveSucceeded')).toEqual(0);
+    expect(channelManager.wallet.listenerCount('objectiveSucceeded')).toEqual(0);
 
     // Test that ensureObjective works when one outgoing message is dropped
     fakeIndexer.goOffline(1);
