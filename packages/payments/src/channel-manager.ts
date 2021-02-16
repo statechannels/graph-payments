@@ -430,6 +430,10 @@ export class ChannelManager implements ChannelManagementAPI {
       if (o.objectiveId === o.objectiveId) {
         remaining.delete(o.objectiveId);
       }
+
+      if (remaining.size === 0) {
+        this.wallet.removeListener('objectiveSucceeded', onObjectiveSucceded);
+      }
     };
 
     this.wallet.on('objectiveSucceeded', onObjectiveSucceded);
