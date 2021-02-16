@@ -418,8 +418,8 @@ export class ChannelManager implements ChannelManagementAPI {
 
   /**
    *
-   * @param objectiveIds objectiveIds to sync on
-   * @param message initial message to send to indexer
+   * @param objectives objectives to ensure success
+   * @param initialOutbox initial outbox to forward to recipients
    *
    * 1. exchanges messages until outbox is empty
    * 2. if any objectives have not finished, waits for a period of time,
