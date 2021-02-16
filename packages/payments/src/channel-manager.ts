@@ -746,20 +746,13 @@ export class ChannelManager implements ChannelManagementAPI {
 
     await pMap(
       _.values(groupedChannelIds),
-      (_channelIds) =>
-        pMap(
-          _.chunk(_channelIds, 50),
-          async (channelIds) => {
-            if (channelIds.length > 0) {
-              this.logger.debug('Closing channels', {channelIds});
-              const {outbox} = await this.wallet.closeChannels(channelIds);
-              this.channelInsights.post({type: 'ChannelsClosed', channelIds});
-              await this.cache.removeChannels(channelIds);
-              await pMap(outbox, (msg) => this.exchangeMessagesUntilOutboxIsEmpty(msg));
-            }
-          },
-          {concurrency: 6}
-        ),
+      async (channelIds) => {
+        this.logger.debug('Closing channels', {channelIds});
+        const {newObjectives, outbox} = await this.wallet.closeChannels(channelIds);
+        await this.ensureObjectives(newObjectives, outbox);
+        this.channelInsights.post({type: 'ChannelsClosed', channelIds});
+        await this.cache.removeChannels(channelIds);
+      },
       {concurrency: 6}
     );
   }
