@@ -169,6 +169,10 @@ jobs:
       - create_db:
           db: receipt
       - run:
+          name: 'E2E tests (with chain, with ledger)'
+          path: 'packages/e2e-testing'
+          command: 'USE_LEDGER=true yarn test:e2e:chain'
+      - run:
           name: 'E2E tests (no chain, with ledger)'
           path: 'packages/e2e-testing'
           command: 'USE_LEDGER=true yarn test:e2e'
@@ -180,8 +184,11 @@ jobs:
           path: /tmp/e2e-test-with-ledger-without-chain.log
       - store_artifacts:
           path: /tmp/e2e-test-without-ledger-without-chain.log
+      - store_artifacts:
+          path: /tmp/e2e-test-with-ledger-with-chain.log
       - upload_logs:
           file: e2e-stats
+
 
   stress-test:
     docker:
