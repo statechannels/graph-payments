@@ -14,6 +14,7 @@ import {Logger, NetworkContracts} from '@graphprotocol/common-ts';
 
 import {createTestLogger, generateAttestations} from './utils';
 import {
+  CHAIN_ID,
   RECEIPT_PRIVATE_KEY,
   RECEIPT_SERVER_PORT,
   RECEIPT_SERVER_URL,
@@ -70,7 +71,8 @@ const commands = {
         loggingConfiguration: {
           logDestination: args.logFile,
           logLevel: 'debug'
-        }
+        },
+        networkConfiguration: {chainNetworkID: CHAIN_ID}
       } as const;
 
       const receiptManager = await ReceiptManager.create(

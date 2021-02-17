@@ -19,7 +19,8 @@ import {BigNumber, constants, Wallet} from 'ethers';
 import {BN} from '@statechannels/wallet-core';
 import {
   defaultTestConfig,
-  overwriteConfigWithDatabaseConnection
+  overwriteConfigWithDatabaseConnection,
+  ServerWalletConfig
 } from '@statechannels/server-wallet';
 import {Address} from '@graphprotocol/statechannels-contracts';
 import {ETHERLIME_ACCOUNTS} from '@statechannels/devtools';
@@ -32,7 +33,8 @@ import {
   PAYER_PRIVATE_KEY,
   REQUEST_CID,
   TEST_SUBGRAPH_ID,
-  TEST_ATTESTATION_APP_ADDRESS
+  TEST_ATTESTATION_APP_ADDRESS,
+  CHAIN_ID
 } from './constants';
 
 type MessageSenderConfig = {
@@ -148,6 +150,23 @@ const createTasks = (logger: Logger) => ({
     logFile
   }: AnyArgs & {messageSenderConfig: MessageSenderConfig}) => {
     const messageSender = constructMessageSender(messageSenderConfig);
+    const walletConfig: ServerWalletConfig = {
+      ...defaultTestConfig({
+        workerThreadAmount: Number(amountOfWorkerThreads),
+        databaseConfiguration: {connection: {database: pgDatabase}},
+        chainServiceConfiguration: {
+          attachChainService: !!process.env.RPC_ENDPOINT,
+          provider: process.env.RPC_ENDPOINT,
+          pk: ETHERLIME_ACCOUNTS[0].privateKey
+        },
+        loggingConfiguration: {
+          logDestination: logFile,
+          logLevel: 'debug'
+        }
+      }),
+      //TODO: Work around for https://github.com/statechannels/statechannels/issues/3317
+      networkConfiguration: {chainNetworkID: CHAIN_ID}
+    };
 
     const channelManager = await ChannelManager.create({
       logger: logger.child({module: 'PaymentManager'}) as any,
@@ -162,19 +181,7 @@ const createTasks = (logger: Logger) => ({
       syncOpeningChannelsPollIntervalMS: 2500,
       ensureAllocationsConcurrency: 10,
 
-      walletConfig: defaultTestConfig({
-        workerThreadAmount: Number(amountOfWorkerThreads),
-        databaseConfiguration: {connection: {database: pgDatabase}},
-        chainServiceConfiguration: {
-          attachChainService: !!process.env.RPC_ENDPOINT,
-          provider: process.env.RPC_ENDPOINT,
-          pk: ETHERLIME_ACCOUNTS[0].privateKey
-        },
-        loggingConfiguration: {
-          logDestination: logFile,
-          logLevel: 'debug'
-        }
-      }),
+      walletConfig,
       backoffStrategy: {
         numAttempts: 1,
         initialDelay: 50
