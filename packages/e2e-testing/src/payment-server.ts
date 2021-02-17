@@ -144,7 +144,8 @@ const createTasks = (logger: Logger) => ({
     numAllocations,
     pgDatabase,
     amountOfWorkerThreads,
-    messageSenderConfig
+    messageSenderConfig,
+    logFile
   }: AnyArgs & {messageSenderConfig: MessageSenderConfig}) => {
     const messageSender = constructMessageSender(messageSenderConfig);
 
@@ -168,6 +169,10 @@ const createTasks = (logger: Logger) => ({
           attachChainService: !!process.env.RPC_ENDPOINT,
           provider: process.env.RPC_ENDPOINT,
           pk: ETHERLIME_ACCOUNTS[0].privateKey
+        },
+        loggingConfiguration: {
+          logDestination: logFile,
+          logLevel: 'debug'
         }
       }),
       backoffStrategy: {

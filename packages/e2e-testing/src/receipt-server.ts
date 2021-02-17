@@ -66,8 +66,12 @@ const commands = {
           attachChainService: !!process.env.RPC_ENDPOINT,
           provider: process.env.RPC_ENDPOINT,
           pk: ETHERLIME_ACCOUNTS[1].privateKey
+        },
+        loggingConfiguration: {
+          logDestination: args.logFile,
+          logLevel: 'debug'
         }
-      };
+      } as const;
 
       const receiptManager = await ReceiptManager.create(
         logger.child({module: 'ReceiptManager'}) as any,
