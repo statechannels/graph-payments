@@ -45,7 +45,7 @@ const commands = {
     builder,
     handler: async (args: AnyArgs): Promise<void> => {
       const logger = createTestLogger(args.logFile).child({module: 'ReceiptServer'});
-      (logger as any).level = 'debug';
+      (logger as any).level = 'trace';
 
       const testContracts = {
         assetHolder: {
@@ -70,7 +70,7 @@ const commands = {
         },
         loggingConfiguration: {
           logDestination: args.logFile,
-          logLevel: 'debug'
+          logLevel: 'trace'
         },
         networkConfiguration: {chainNetworkID: CHAIN_ID}
       } as const;
