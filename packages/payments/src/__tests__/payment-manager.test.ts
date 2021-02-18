@@ -269,7 +269,7 @@ describe('ChannelManager', () => {
 
     // sync allocations
     await channelManager.syncAllocations([request(fakeIndexer.allocation(allocationId))]);
-    expect(await channelManager.activeChannelCount(allocationId)).toEqual(0);
+    expect(await channelManager.activeChannelCount(allocationId)).toEqual(2);
     expect(channelManager.wallet.listenerCount('objectiveSucceeded')).toEqual(0);
 
     // Test that ensureObjective works when one outgoing message is dropped
@@ -283,6 +283,7 @@ describe('ChannelManager', () => {
     await expect(paymentManager.createPayment(TEST_PAYMENT)).rejects.toThrowError(
       'No free channels found'
     );
+    expect((await paymentWallet.getChannels()).channelResults.length).toEqual(2);
 
     // now leave the old channel manager to one side and start a new one
     const channelManager2 = await TestChannelManager.create({...cmDefaultOpts, messageSender});

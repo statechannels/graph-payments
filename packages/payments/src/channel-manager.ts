@@ -688,6 +688,11 @@ export class ChannelManager implements ChannelManagementAPI {
         numChannels
       );
 
+      // We put the channels in the cache straight away.
+      // This way, if the CM restarts before objectives are ensured,
+      // or if the objectives don't get
+      await this.insertActiveChannels(channelResults);
+
       const channelIds = _.map(channelResults, 'channelId');
 
       this.channelInsights.post(
