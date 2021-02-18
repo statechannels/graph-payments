@@ -11,6 +11,7 @@ import {
 import {ETHERLIME_ACCOUNTS} from '@statechannels/devtools';
 import {constants} from 'ethers';
 import {Logger, NetworkContracts} from '@graphprotocol/common-ts';
+import responseTime from 'response-time';
 
 import {createTestLogger, generateAttestations} from './utils';
 import {
@@ -108,6 +109,11 @@ function startApp(
 ) {
   express()
     .use(bodyParser.json({limit: '5mb'}))
+    .use(
+      responseTime((req, res, time) => {
+        logger.debug('Request complete', {url: req.url, time});
+      })
+    )
     .post('/payment', async (req, res) => {
       req.setTimeout(3_600_000); // One hour
       logger.trace('call made to /payment', req);
