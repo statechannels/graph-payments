@@ -24,6 +24,7 @@ import {
 } from '@statechannels/server-wallet';
 import {Address} from '@graphprotocol/statechannels-contracts';
 import {ETHERLIME_ACCOUNTS} from '@statechannels/devtools';
+import responseTime from 'response-time';
 
 import {createTestLogger, generateAllocations} from './utils';
 import {
@@ -36,7 +37,6 @@ import {
   TEST_ATTESTATION_APP_ADDRESS,
   CHAIN_ID
 } from './constants';
-
 type MessageSenderConfig = {
   dropOutgoingRate: number;
   dropIncomingRate: number;
@@ -271,6 +271,11 @@ function startApp(
   const app = express();
   app
     .use(bodyParser.json({limit: '5mb'}))
+    .use(
+      responseTime((req, res, time) => {
+        logger.debug('Request complete', {url: req.url, time});
+      })
+    )
     .get('/', (_, res) => res.status(200).send('Ready to roll!'))
     .get('/sendPayment', async (req, res) => {
       const privateKey = req.query.privateKey as string;
