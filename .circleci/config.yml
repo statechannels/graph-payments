@@ -23,6 +23,29 @@ restore_dep: &restore_dep
     key: v0-dependency-cache-{{ checksum "yarn.lock" }}
 
 commands:
+  log_stats:
+    description: 'Log stats '
+    parameters:
+      file:
+        type: string
+        default: stats
+    steps:
+      - run:
+          command: bash bin/log_memory.sh <<parameters.file>>
+          background: true
+
+  upload_logs:
+    description: 'Upload logs '
+    parameters:
+      file:
+        type: string
+        default: memory-usage.txt
+    steps:
+      - store_artifacts:
+          path: /root/<< parameters.file >>.txt
+          destination: << parameters.file >>
+
+
   install_postgresql_client:
     description: 'Install postgresql client'
     steps:
@@ -136,6 +159,8 @@ jobs:
 
     steps:
       - checkout
+      - log_stats:
+          file: e2e-stats
       - attach_workspace:
           at: ~/project
       - install_postgresql_client
@@ -155,6 +180,8 @@ jobs:
           path: /tmp/e2e-test-with-ledger-without-chain.log
       - store_artifacts:
           path: /tmp/e2e-test-without-ledger-without-chain.log
+      - upload_logs:
+          file: e2e-stats
 
   stress-test:
     docker:
