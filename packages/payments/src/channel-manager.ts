@@ -147,6 +147,9 @@ export class ChannelManager implements ChannelManagementAPI {
 
     await channelManager.cache.initialize();
 
+    // Do not block on this operation.
+    channelManager.closeRetired();
+
     return channelManager;
   }
 
@@ -710,7 +713,15 @@ export class ChannelManager implements ChannelManagementAPI {
     });
   }
 
-  public async closeRetired(): Promise<void> {
+  /**
+   * Closes retired channels.
+   *
+   * The payment manager will not use retired channels anymore.
+   * Also, retired channels will not trigger a `removeAllocation` call.
+   * Therefore, no other code should be running objectives for the
+   * retired channels here.
+   */
+  private async closeRetired(): Promise<void> {
     const groupedChannelIds = await this.cache.closableChannels();
 
     await pMap(
