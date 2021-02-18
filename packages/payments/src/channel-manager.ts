@@ -27,7 +27,6 @@ import {
   isLedgerChannel,
   delay,
   extractSnapshot,
-  convertBytes32ToAddress,
   extractCapacity
 } from './utils';
 import {ChannelCache, createPostgresCache} from './channel-cache';
@@ -147,39 +146,8 @@ export class ChannelManager implements ChannelManagementAPI {
     );
 
     await channelManager.cache.initialize();
-    await channelManager.populateCache();
 
     return channelManager;
-  }
-
-  protected async populateCache(): Promise<void> {
-    await this.cache.clearCache();
-    const {channelResults} = await this.wallet.getChannels();
-
-    this.logger.trace('Cache for payment channels being seeded from wallet database', {
-      channelResults
-    });
-
-    const [ledgerChannels, paymentChannels] = _.partition(channelResults, isLedgerChannel);
-
-    this.logger.debug('Cache repopulating from state channels database', {
-      numRunning: paymentChannels.length,
-      numLedger: ledgerChannels.length
-    });
-
-    await this.insertActiveChannels(paymentChannels);
-
-    await pMap(
-      ledgerChannels,
-      ({channelId, allocations, fundingStatus, participants: [, {destination: allocationId}]}) => {
-        if (fundingStatus !== 'Defunded')
-          this.cache.insertLedgerChannel(
-            convertBytes32ToAddress(allocationId),
-            channelId,
-            allocations
-          );
-      }
-    );
   }
 
   private backoffIntervals: number[];
