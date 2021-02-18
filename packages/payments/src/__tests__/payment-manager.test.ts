@@ -299,6 +299,11 @@ describe('ChannelManager', () => {
       signedStates: expect.any(Array)
     });
 
+    // Check that I can create a payment with the other channel.
+    await expect(paymentManager.createPayment(TEST_PAYMENT)).resolves.toMatchObject({
+      signedStates: expect.any(Array)
+    });
+
     expect(await (await paymentWallet.getChannels()).channelResults.length).toEqual(2);
   });
 });
