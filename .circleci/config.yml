@@ -189,6 +189,108 @@ jobs:
       - store_artifacts:
           path: /tmp/e2e-test-with-ledger-with-chain.log
 
+  e2e-test2:
+    docker:
+      - image: geoknee/statechannels:12.18-solc0.7.4 # Fast contract compilation with solc installed
+      - image: circleci/postgres:11.2-alpine-postgis
+    <<: *defaults
+
+    steps:
+      - checkout
+      - attach_workspace:
+          at: ~/project
+      - install_postgresql_client
+      - create_db:
+          db: payer
+      - create_db:
+          db: receipt
+      - run:
+          name: 'E2E tests (with chain, with ledger)'
+          path: 'packages/e2e-testing'
+          command: 'USE_LEDGER=true yarn test:e2e:chain'
+      - run:
+          name: 'E2E tests (no chain, with ledger)'
+          path: 'packages/e2e-testing'
+          command: 'USE_LEDGER=true yarn test:e2e'
+      - run:
+          name: 'E2E tests (no chain)'
+          path: 'packages/e2e-testing'
+          command: 'yarn test:e2e'
+      - store_artifacts:
+          path: /tmp/e2e-test-with-ledger-without-chain.log
+      - store_artifacts:
+          path: /tmp/e2e-test-without-ledger-without-chain.log
+      - store_artifacts:
+          path: /tmp/e2e-test-with-ledger-with-chain.log
+ 
+  e2e-test3:
+    docker:
+      - image: geoknee/statechannels:12.18-solc0.7.4 # Fast contract compilation with solc installed
+      - image: circleci/postgres:11.2-alpine-postgis
+    <<: *defaults
+
+    steps:
+      - checkout
+      - attach_workspace:
+          at: ~/project
+      - install_postgresql_client
+      - create_db:
+          db: payer
+      - create_db:
+          db: receipt
+      - run:
+          name: 'E2E tests (with chain, with ledger)'
+          path: 'packages/e2e-testing'
+          command: 'USE_LEDGER=true yarn test:e2e:chain'
+      - run:
+          name: 'E2E tests (no chain, with ledger)'
+          path: 'packages/e2e-testing'
+          command: 'USE_LEDGER=true yarn test:e2e'
+      - run:
+          name: 'E2E tests (no chain)'
+          path: 'packages/e2e-testing'
+          command: 'yarn test:e2e'
+      - store_artifacts:
+          path: /tmp/e2e-test-with-ledger-without-chain.log
+      - store_artifacts:
+          path: /tmp/e2e-test-without-ledger-without-chain.log
+      - store_artifacts:
+          path: /tmp/e2e-test-with-ledger-with-chain.log
+
+  e2e-test4:
+    docker:
+      - image: geoknee/statechannels:12.18-solc0.7.4 # Fast contract compilation with solc installed
+      - image: circleci/postgres:11.2-alpine-postgis
+    <<: *defaults
+
+    steps:
+      - checkout
+      - attach_workspace:
+          at: ~/project
+      - install_postgresql_client
+      - create_db:
+          db: payer
+      - create_db:
+          db: receipt
+      - run:
+          name: 'E2E tests (with chain, with ledger)'
+          path: 'packages/e2e-testing'
+          command: 'USE_LEDGER=true yarn test:e2e:chain'
+      - run:
+          name: 'E2E tests (no chain, with ledger)'
+          path: 'packages/e2e-testing'
+          command: 'USE_LEDGER=true yarn test:e2e'
+      - run:
+          name: 'E2E tests (no chain)'
+          path: 'packages/e2e-testing'
+          command: 'yarn test:e2e'
+      - store_artifacts:
+          path: /tmp/e2e-test-with-ledger-without-chain.log
+      - store_artifacts:
+          path: /tmp/e2e-test-without-ledger-without-chain.log
+      - store_artifacts:
+          path: /tmp/e2e-test-with-ledger-with-chain.log
+
   stress-test:
     docker:
       - image: geoknee/statechannels:12.18-solc0.7.4 # Fast contract compilation with solc installed
@@ -265,21 +367,16 @@ workflows:
   graph-payments:
     jobs:
       - build
-      - test:
-          requires:
-            - build
       - e2e-test:
           requires:
             - build
-      - stress-test:
+      - e2e-test2:
           requires:
             - build
-      - stress-test-threaded:
+      - e2e-test3:
           requires:
             - build
-      - profile:
+      - e2e-test4:
           requires:
             - build
-      - profile-threaded:
-          requires:
-            - build
+
