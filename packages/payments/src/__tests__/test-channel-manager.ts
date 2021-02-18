@@ -24,7 +24,6 @@ export class TestChannelManager extends ChannelManager {
     const channelManager = new TestChannelManager(wallet, opts);
 
     await channelManager.cache.initialize();
-    await channelManager.populateCache();
 
     return channelManager;
   }
