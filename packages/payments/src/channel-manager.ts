@@ -345,16 +345,16 @@ export class ChannelManager implements ChannelManagementAPI {
       async (allocationId) => {
         const {amount, channelIds} = await this.cache.retireChannels(allocationId);
         channelsRetiredEvent.report[allocationId] = {allocationId, amount, channelIds};
+        this.channelInsights.post({
+          type: 'ChannelsRetired',
+          report: {
+            [allocationId]: {allocationId, amount, channelIds}
+          }
+        });
+        await this.closePaymentChannels(channelIds);
       },
       {concurrency: 4}
     );
-
-    this.channelInsights.post(channelsRetiredEvent);
-
-    // this will only close channels where it is currently our turn
-    // it will close _any_ retired channels - not just those from this allocation
-    // we might want to decide to call this periodically, instead of triggering here
-    await this.closeRetired();
 
     if (this.useLedger) await this.closeLedgersForAllocations(allocationIds);
   }
@@ -756,6 +756,16 @@ export class ChannelManager implements ChannelManagementAPI {
       },
       {concurrency: 6}
     );
+  }
+
+  private async closePaymentChannels(channelIds: string[]): Promise<void> {
+    this.logger.debug('Closing channels', {channelIds});
+    const {newObjectives, outbox} = await this.wallet.closeChannels(channelIds);
+    const results = await this.ensureObjectives(newObjectives, outbox);
+
+    const closedChannelIds = results.filter((r) => r.status === 'closed').map((r) => r.channelId);
+    this.channelInsights.post({type: 'ChannelsClosed', channelIds: closedChannelIds});
+    await this.cache.removeChannels(closedChannelIds);
   }
 
   private registerMetrics(metrics: Metrics): ChannelManagerMetrics {
