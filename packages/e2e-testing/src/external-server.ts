@@ -7,9 +7,9 @@ import {Logger} from '@graphprotocol/common-ts';
 
 import {PAYER_SERVER_URL, RECEIPT_SERVER_URL} from './constants';
 
-class ExternalServer {
+export class ExternalServer {
   private serverProcess: ChildProcess | undefined = undefined;
-  public get pid() {
+  public get pid(): number | undefined {
     return this.serverProcess?.pid;
   }
   public constructor(

@@ -19,7 +19,7 @@ import {
   RESPONSE_CID,
   TEST_SUBGRAPH_ID
 } from '../src/constants';
-import {createPaymentServer, createReceiptServer} from '../src/external-server';
+import {createPaymentServer, createReceiptServer, ExternalServer} from '../src/external-server';
 
 import {
   getChannels,
@@ -52,8 +52,8 @@ const serverArgs = [
   `--numAllocations ${NUM_ALLOCATIONS}`
 ];
 
-const gatewayServer = createPaymentServer(serverArgs);
-const indexerServer = createReceiptServer(serverArgs);
+let gatewayServer: ExternalServer;
+let indexerServer: ExternalServer;
 
 const baseConfig = defaultTestConfig({
   networkConfiguration: {
@@ -107,6 +107,9 @@ beforeAll(async () => {
 
 beforeEach(async () => {
   try {
+    gatewayServer = createPaymentServer(serverArgs);
+    indexerServer = createReceiptServer(serverArgs);
+
     await Promise.all([RECEIPT_SERVER_DB_NAME, PAYER_SERVER_DB_NAME].map(clearExistingChannels));
     await Promise.all([gatewayServer.start(logger), indexerServer.start(logger)]);
   } catch (error) {
