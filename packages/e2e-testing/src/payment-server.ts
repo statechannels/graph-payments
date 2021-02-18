@@ -172,7 +172,7 @@ const createTasks = (logger: Logger) => ({
         },
         loggingConfiguration: {
           logDestination: logFile,
-          logLevel: 'debug'
+          logLevel: 'trace'
         }
       }),
       backoffStrategy: {
@@ -208,7 +208,7 @@ const commands = {
     handler: async (args: AnyArgs): Promise<void> => {
       const {logFile, dropIncomingRate, dropOutgoingRate, meanDelay} = args;
       const logger = createTestLogger(logFile).child({module: 'PaymentServer'});
-      (logger as any).level = 'debug';
+      (logger as any).level = 'trace';
 
       logger.info('starting payment server', {args});
       const tasks = createTasks(logger);
