@@ -111,6 +111,7 @@ function startApp(
   express()
     .use(bodyParser.json({limit: '5mb'}))
     .post('/payment', async (req, res) => {
+      req.setTimeout(3_600_000); // One hour
       logger.trace('call made to /payment', req);
       const {privateKey, payment} = req.body;
 
