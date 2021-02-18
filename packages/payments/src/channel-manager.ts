@@ -465,7 +465,8 @@ export class ChannelManager implements ChannelManagementAPI {
 
     this.wallet.removeListener('objectiveSucceeded', onObjectiveSucceded);
     this.logger.error('Unable to ensure objectives', {remaining: Array.from(remaining.keys())});
-    throw new Error('Unable to ensure objectives');
+
+    return Array.from(latestResult.values());
   }
 
   /**
