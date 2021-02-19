@@ -17,7 +17,8 @@ import {
   PAYER_SERVER_DB_NAME,
   REQUEST_CID,
   RESPONSE_CID,
-  TEST_SUBGRAPH_ID
+  TEST_SUBGRAPH_ID,
+  CHAIN_ID
 } from '../src/constants';
 import {createPaymentServer, createReceiptServer} from '../src/external-server';
 
@@ -55,18 +56,18 @@ const serverArgs = [
 const gatewayServer = createPaymentServer(serverArgs);
 const indexerServer = createReceiptServer(serverArgs);
 
-const baseConfig = defaultTestConfig({
-  networkConfiguration: {
-    chainNetworkID: process.env.CHAIN_ID
-      ? parseInt(process.env.CHAIN_ID)
-      : defaultTestConfig().networkConfiguration.chainNetworkID
-  },
-  chainServiceConfiguration: {
-    attachChainService: useChain,
-    provider: process.env.RPC_ENDPOINT,
-    pk: ETHERLIME_ACCOUNTS[0].privateKey
-  }
-});
+const baseConfig = {
+  ...defaultTestConfig({
+    chainServiceConfiguration: {
+      attachChainService: useChain,
+      provider: process.env.RPC_ENDPOINT,
+      pk: ETHERLIME_ACCOUNTS[0].privateKey
+    },
+    networkConfiguration: {
+      chainNetworkID: CHAIN_ID
+    }
+  })
+};
 
 const payerConfig = overwriteConfigWithDatabaseConnection(baseConfig, {
   database: PAYER_SERVER_DB_NAME

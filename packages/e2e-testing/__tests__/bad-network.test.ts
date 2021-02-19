@@ -50,13 +50,7 @@ const indexerServer = createReceiptServer([
   // keys for attestation signing but no action is taken on startup
   `--numAllocations ${NUM_ALLOCATIONS}`
 ]);
-
 const baseConfig = defaultTestConfig({
-  networkConfiguration: {
-    chainNetworkID: process.env.CHAIN_ID
-      ? parseInt(process.env.CHAIN_ID)
-      : defaultTestConfig().networkConfiguration.chainNetworkID
-  },
   chainServiceConfiguration: {
     attachChainService: false
   }
