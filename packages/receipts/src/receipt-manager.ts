@@ -260,13 +260,14 @@ export class ReceiptManager implements ReceiptManagerInterface {
   }
 
   private async _pushMessage(payload: unknown): Promise<ChannelResult> {
-    const {
-      channelResults: [channelResult],
-      outbox: pushMessageOutbox
-    } = await this.wallet.pushMessage(payload);
+    const {channelResults, outbox: pushMessageOutbox} = await this.wallet.pushMessage(payload);
     if (pushMessageOutbox.length > 0) {
       throw new RMError('Did not expect any outbox items');
     }
-    return channelResult;
+    if (channelResults.length > 1) {
+      this.logger.warn('Found additional channel results', {channelResults});
+    }
+
+    return channelResults[0];
   }
 }
