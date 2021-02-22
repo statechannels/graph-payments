@@ -14,6 +14,7 @@ import {
 import _ from 'lodash';
 import {constants} from 'ethers';
 import {makePrivateKey} from '@statechannels/wallet-core';
+import hash from 'object-hash';
 
 import {extractSnapshot, isLedgerChannel, summarisePayload} from './utils';
 
@@ -67,14 +68,14 @@ export class ReceiptManager implements ReceiptManagerInterface {
   }
 
   async inputStateChannelMessage(payload: unknown): Promise<void | unknown> {
-    this.logger.debug('Payload received', summarisePayload(payload));
+    this.logger.debug('Payload received', {...summarisePayload(payload), id: hash(payload)});
     const results = await this.wallet.pushMessage(payload);
     const pushMessageResults = results;
     const {channelResults} = pushMessageResults;
-    this.logger.debug(
-      'Payload pushed',
-      channelResults.filter((r) => !isLedgerChannel(r)).map(extractSnapshot)
-    );
+    this.logger.debug('Payload pushed', {
+      ...channelResults.filter((r) => !isLedgerChannel(r)).map(extractSnapshot),
+      id: hash(payload)
+    });
 
     const proposedChannels = channelResults.filter((cr: ChannelResult) => cr.status === 'proposed');
     const runningChannels = channelResults.filter(
