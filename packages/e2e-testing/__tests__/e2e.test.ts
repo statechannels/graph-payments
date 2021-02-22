@@ -166,7 +166,7 @@ describe('Payment & Receipt Managers E2E', () => {
     }
   });
 
-  test(`Can remove ${NUM_ALLOCATIONS} allocations using syncAllocations`, async () => {
+  test.only(`Can remove ${NUM_ALLOCATIONS} allocations using syncAllocations`, async () => {
     await axios.post(`${PAYER_SERVER_URL}/syncAllocations`);
 
     const receiptChannels = await getChannels(receiptWallet);
