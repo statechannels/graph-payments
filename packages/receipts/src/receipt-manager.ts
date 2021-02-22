@@ -72,6 +72,7 @@ export class ReceiptManager implements ReceiptManagerInterface {
     const results = await this.wallet.pushMessage(payload);
     const pushMessageResults = results;
     const {channelResults} = pushMessageResults;
+    this.logger.debug('raw results', channelResults);
     this.logger.debug('Payload pushed', {
       ...channelResults.filter((r) => !isLedgerChannel(r)).map(extractSnapshot),
       id: hash(payload)
