@@ -172,22 +172,10 @@ jobs:
           name: 'E2E tests (with chain, with ledger)'
           path: 'packages/e2e-testing'
           command: 'USE_LEDGER=true yarn test:e2e:chain'
-      - run:
-          name: 'E2E tests (no chain, with ledger)'
-          path: 'packages/e2e-testing'
-          command: 'USE_LEDGER=true yarn test:e2e'
-      - run:
-          name: 'E2E tests (no chain)'
-          path: 'packages/e2e-testing'
-          command: 'yarn test:e2e'
-      - store_artifacts:
-          path: /tmp/e2e-test-with-ledger-without-chain.log
-      - store_artifacts:
-          path: /tmp/e2e-test-without-ledger-without-chain.log
-      - upload_logs:
-          file: e2e-stats
       - store_artifacts:
           path: /tmp/e2e-test-with-ledger-with-chain.log
+      - upload_logs:
+          file: e2e-stats
 
   e2e-test2:
     docker:
@@ -210,7 +198,7 @@ jobs:
           command: 'USE_LEDGER=true yarn test:e2e:chain'
       - store_artifacts:
           path: /tmp/e2e-test-with-ledger-with-chain.log
- 
+
   e2e-test3:
     docker:
       - image: geoknee/statechannels:12.18-solc0.7.4 # Fast contract compilation with solc installed
@@ -230,18 +218,6 @@ jobs:
           name: 'E2E tests (with chain, with ledger)'
           path: 'packages/e2e-testing'
           command: 'USE_LEDGER=true yarn test:e2e:chain'
-      - run:
-          name: 'E2E tests (no chain, with ledger)'
-          path: 'packages/e2e-testing'
-          command: 'USE_LEDGER=true yarn test:e2e'
-      - run:
-          name: 'E2E tests (no chain)'
-          path: 'packages/e2e-testing'
-          command: 'yarn test:e2e'
-      - store_artifacts:
-          path: /tmp/e2e-test-with-ledger-without-chain.log
-      - store_artifacts:
-          path: /tmp/e2e-test-without-ledger-without-chain.log
       - store_artifacts:
           path: /tmp/e2e-test-with-ledger-with-chain.log
 
@@ -264,18 +240,6 @@ jobs:
           name: 'E2E tests (with chain, with ledger)'
           path: 'packages/e2e-testing'
           command: 'USE_LEDGER=true yarn test:e2e:chain'
-      - run:
-          name: 'E2E tests (no chain, with ledger)'
-          path: 'packages/e2e-testing'
-          command: 'USE_LEDGER=true yarn test:e2e'
-      - run:
-          name: 'E2E tests (no chain)'
-          path: 'packages/e2e-testing'
-          command: 'yarn test:e2e'
-      - store_artifacts:
-          path: /tmp/e2e-test-with-ledger-without-chain.log
-      - store_artifacts:
-          path: /tmp/e2e-test-without-ledger-without-chain.log
       - store_artifacts:
           path: /tmp/e2e-test-with-ledger-with-chain.log
 
