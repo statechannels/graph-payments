@@ -170,8 +170,11 @@ describe('Payment & Receipt Managers E2E', () => {
     await axios.post(`${PAYER_SERVER_URL}/syncAllocations`);
 
     const receiptChannels = await getChannels(receiptWallet);
+
     const paymentChannels = await getChannels(paymentWallet);
 
+    logger.debug('receipt channel results', receiptChannels);
+    logger.debug('payment channel results', paymentChannels);
     for (const {status} of receiptChannels) expect(status).toBe('closed');
     for (const {status} of paymentChannels) expect(status).toBe('closed');
   });
