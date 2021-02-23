@@ -23,7 +23,11 @@ export function summarisePayload(payload: unknown): PayloadSummary {
       type: o.type,
       ...o.data
     })),
-    requests: wirePayload.requests?.map((r) => ({channel: r.channelId, type: r.type}))
+    requests: wirePayload.requests?.map((r) => ({
+      channel: r.channelId,
+      type: r.type,
+      signingAddress: r.type === 'ProposeLedgerUpdate' ? r.signingAddress : undefined
+    }))
   };
 }
 

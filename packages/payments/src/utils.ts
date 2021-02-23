@@ -167,7 +167,11 @@ export function summariseResponse(response: unknown): ResponseSummary {
       signedBy: s.signatures.map((sig) => getSignerAddress(deserializeState(s), sig))
     })),
     objectives: wirePayload.objectives?.map((o) => ({type: o.type})),
-    requests: wirePayload.requests?.map((r) => ({channel: r.channelId, type: r.type}))
+    requests: wirePayload.requests?.map((r) => ({
+      channel: r.channelId,
+      type: r.type,
+      signingAddress: r.type === 'ProposeLedgerUpdate' ? r.signingAddress : undefined
+    }))
   };
 }
 
