@@ -70,14 +70,14 @@ export class ReceiptManager implements ReceiptManagerInterface {
   async inputStateChannelMessage(payload: unknown): Promise<void | unknown> {
     this.logger.debug('Payload received', {...summarisePayload(payload), id: hash(payload)});
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    this.logger.debug('raw payload', {payload: payload as any, id: hash(payload)});
+
     const results = await this.wallet.pushMessage(payload);
-    this.logger.debug('raw results', {results, id: hash(payload)});
+
     const pushMessageResults = results;
     const {channelResults} = pushMessageResults;
 
     this.logger.debug('Payload pushed', {
-      ...channelResults.filter((r) => !isLedgerChannel(r)).map(extractSnapshot),
+      channelResults: channelResults.map(extractSnapshot),
       id: hash(payload)
     });
 

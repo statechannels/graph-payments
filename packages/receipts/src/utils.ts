@@ -1,6 +1,6 @@
 import {Payload as WirePayload} from '@statechannels/wire-format';
 import {ChannelResult, ChannelStatus} from '@statechannels/client-api-schema';
-import {BN, NULL_APP_DATA} from '@statechannels/wallet-core';
+import {BN, deserializeState, getSignerAddress, NULL_APP_DATA} from '@statechannels/wallet-core';
 import {constants} from 'ethers';
 
 type PayloadSummary = {
@@ -16,7 +16,8 @@ export function summarisePayload(payload: unknown): PayloadSummary {
     states: wirePayload.signedStates?.map((s) => ({
       channel: s.channelId,
       nonce: s.channelNonce,
-      turnNum: s.turnNum
+      turnNum: s.turnNum,
+      signedBy: s.signatures.map((sig) => getSignerAddress(deserializeState(s), sig))
     })),
     objectives: wirePayload.objectives?.map((o) => ({
       type: o.type,
@@ -39,7 +40,13 @@ export interface ChannelSnapshot {
 export function extractSnapshot(channel: ChannelResult): ChannelSnapshot {
   const {channelId, turnNum, status} = channel;
   const {indexerBal, gatewayBal} = extractBalances(channel);
-  return {channelId, turnNum, status, indexerBal, gatewayBal};
+  return {
+    channelId,
+    turnNum,
+    status,
+    indexerBal,
+    gatewayBal
+  };
 }
 
 // todo(reorg): this should live in statechannels-contracts
