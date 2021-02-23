@@ -182,10 +182,12 @@ jobs:
       - upload_logs:
           file: e2e-stats
       - run:
+          when: on_fail        
           name: 'Store Payer DB'
           path: 'packages/e2e-testing'
           command: pg_dump -h localhost -p 5432 -U postgres payer > /tmp/payer_db.sql
       - run:
+          when: on_fail
           name: 'Store Receipt DB'
           path: 'packages/e2e-testing'
           command: 'pg_dump -h localhost -p 5432 -U postgres receipt > /tmp/receipt_db.sql'
@@ -194,116 +196,6 @@ jobs:
           path: /tmp/payer_db.sql
       - store_artifacts:
           path: /tmp/receipt_db.sql
-
-
-  e2e-test2:
-    docker:
-      - image: geoknee/statechannels:12.18-solc0.7.4 # Fast contract compilation with solc installed
-      - image: circleci/postgres:11.2-alpine-postgis
-    <<: *defaults
-
-    steps:
-      - checkout
-      - attach_workspace:
-          at: ~/project
-      - install_postgresql_client
-      - create_db:
-          db: payer
-      - create_db:
-          db: receipt
-      - run:
-          name: 'E2E tests (with chain, with ledger)'
-          path: 'packages/e2e-testing'
-          command: 'USE_LEDGER=true yarn test:e2e:chain'
-      - store_artifacts:
-          path: /tmp/e2e-test-with-ledger-with-chain.log
-      - run:
-          name: 'Store Payer DB'
-          path: 'packages/e2e-testing'
-          command: pg_dump -h localhost -p 5432 -U postgres payer > /tmp/payer_db.sql
-      - run:
-          name: 'Store Receipt DB'
-          path: 'packages/e2e-testing'
-          command: 'pg_dump -h localhost -p 5432 -U postgres receipt > /tmp/receipt_db.sql'
-      - store_artifacts:
-          path: /tmp/payer_db.sql
-      - store_artifacts:
-          path: /tmp/receipt_db.sql
-
-  e2e-test3:
-    docker:
-      - image: geoknee/statechannels:12.18-solc0.7.4 # Fast contract compilation with solc installed
-      - image: circleci/postgres:11.2-alpine-postgis
-    <<: *defaults
-
-    steps:
-      - checkout
-      - attach_workspace:
-          at: ~/project
-      - install_postgresql_client
-      - create_db:
-          db: payer
-      - create_db:
-          db: receipt
-      - run:
-          name: 'E2E tests (with chain, with ledger)'
-          path: 'packages/e2e-testing'
-          command: 'USE_LEDGER=true yarn test:e2e:chain'
-      - store_artifacts:
-          path: /tmp/e2e-test-with-ledger-with-chain.log
-      - run:
-          name: 'Store Payer DB'
-          path: 'packages/e2e-testing'
-          command: pg_dump -h localhost -p 5432 -U postgres payer > /tmp/payer_db.sql
-      - run:
-          name: 'Store Receipt DB'
-          path: 'packages/e2e-testing'
-          command: 'pg_dump -h localhost -p 5432 -U postgres receipt > /tmp/receipt_db.sql'
-      - store_artifacts:
-          path: /tmp/payer_db.sql
-      - store_artifacts:
-          path: /tmp/receipt_db.sql
-
-
-  e2e-test4:
-    docker:
-      - image: geoknee/statechannels:12.18-solc0.7.4 # Fast contract compilation with solc installed
-      - image: circleci/postgres:11.2-alpine-postgis
-    <<: *defaults
-
-    steps:
-      - checkout
-      - attach_workspace:
-          at: ~/project
-      - install_postgresql_client
-      - create_db:
-          db: payer
-      - create_db:
-          db: receipt
-      - run:
-          name: 'E2E tests (with chain, with ledger)'
-          path: 'packages/e2e-testing'
-          command: 'USE_LEDGER=true yarn test:e2e:chain'
-      - store_artifacts:
-          path: /tmp/e2e-test-with-ledger-with-chain.log
-      - run:
-          name: 'Store Payer DB'
-          path: 'packages/e2e-testing'
-          command: pg_dump -h localhost -p 5432 -U postgres payer > /tmp/payer_db.sql
-      - run:
-          name: 'Store Receipt DB'
-          path: 'packages/e2e-testing'
-          command: 'pg_dump -h localhost -p 5432 -U postgres receipt > /tmp/receipt_db.sql'
-
-      - store_artifacts:
-          path: /tmp/payer_db.sql
-      - store_artifacts:
-         path: /tmp/receipt_db.sql
-
-
-
-
-
 
   stress-test:
     docker:
@@ -382,15 +274,6 @@ workflows:
     jobs:
       - build
       - e2e-test:
-          requires:
-            - build
-      - e2e-test2:
-          requires:
-            - build
-      - e2e-test3:
-          requires:
-            - build
-      - e2e-test4:
           requires:
             - build
 
