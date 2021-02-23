@@ -56,7 +56,9 @@ commands:
           command: |
             seq 1 8 | xargs -I{} mkdir -p /usr/share/man/man{} 
             sudo apt-get update
+            sudo apt install -y postgresql-client || true
             sudo apt install -y postgresql-client-11 || true
+
   create_db:
     description: 'Creates a database'
     parameters:
