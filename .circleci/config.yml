@@ -56,7 +56,7 @@ commands:
           command: |
             seq 1 8 | xargs -I{} mkdir -p /usr/share/man/man{} 
             sudo apt-get update
-            sudo apt install -y postgresql-client || true
+            sudo apt install -y postgresql-client-11 || true
   create_db:
     description: 'Creates a database'
     parameters:
@@ -176,6 +176,20 @@ jobs:
           path: /tmp/e2e-test-with-ledger-with-chain.log
       - upload_logs:
           file: e2e-stats
+      - run:
+          name: 'Store Payer DB'
+          path: 'packages/e2e-testing'
+          command: pg_dump -h localhost -p 5432 -U postgres payer > /tmp/payer_db.sql
+      - run:
+          name: 'Store Receipt DB'
+          path: 'packages/e2e-testing'
+          command: 'pg_dump -h localhost -p 5432 -U postgres receipt > /tmp/receipt_db.sql'
+
+      - store_artifacts:
+          path: /tmp/payer_db.sql
+      - store_artifacts:
+          path: /tmp/receipt_db.sql
+
 
   e2e-test2:
     docker:
@@ -198,6 +212,18 @@ jobs:
           command: 'USE_LEDGER=true yarn test:e2e:chain'
       - store_artifacts:
           path: /tmp/e2e-test-with-ledger-with-chain.log
+      - run:
+          name: 'Store Payer DB'
+          path: 'packages/e2e-testing'
+          command: pg_dump -h localhost -p 5432 -U postgres payer > /tmp/payer_db.sql
+      - run:
+          name: 'Store Receipt DB'
+          path: 'packages/e2e-testing'
+          command: 'pg_dump -h localhost -p 5432 -U postgres receipt > /tmp/receipt_db.sql'
+      - store_artifacts:
+          path: /tmp/payer_db.sql
+      - store_artifacts:
+          path: /tmp/receipt_db.sql
 
   e2e-test3:
     docker:
@@ -220,6 +246,19 @@ jobs:
           command: 'USE_LEDGER=true yarn test:e2e:chain'
       - store_artifacts:
           path: /tmp/e2e-test-with-ledger-with-chain.log
+      - run:
+          name: 'Store Payer DB'
+          path: 'packages/e2e-testing'
+          command: pg_dump -h localhost -p 5432 -U postgres payer > /tmp/payer_db.sql
+      - run:
+          name: 'Store Receipt DB'
+          path: 'packages/e2e-testing'
+          command: 'pg_dump -h localhost -p 5432 -U postgres receipt > /tmp/receipt_db.sql'
+      - store_artifacts:
+          path: /tmp/payer_db.sql
+      - store_artifacts:
+          path: /tmp/receipt_db.sql
+
 
   e2e-test4:
     docker:
@@ -242,6 +281,24 @@ jobs:
           command: 'USE_LEDGER=true yarn test:e2e:chain'
       - store_artifacts:
           path: /tmp/e2e-test-with-ledger-with-chain.log
+      - run:
+          name: 'Store Payer DB'
+          path: 'packages/e2e-testing'
+          command: pg_dump -h localhost -p 5432 -U postgres payer > /tmp/payer_db.sql
+      - run:
+          name: 'Store Receipt DB'
+          path: 'packages/e2e-testing'
+          command: 'pg_dump -h localhost -p 5432 -U postgres receipt > /tmp/receipt_db.sql'
+
+      - store_artifacts:
+          path: /tmp/payer_db.sql
+      - store_artifacts:
+         path: /tmp/receipt_db.sql
+
+
+
+
+
 
   stress-test:
     docker:
