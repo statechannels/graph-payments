@@ -85,13 +85,19 @@ export class ReceiptManager implements ReceiptManagerInterface {
     const runningChannels = channelResults.filter(
       (cr: ChannelResult) => cr.status === 'running' && !isLedgerChannel(cr)
     );
-    const closedChannels = channelResults.filter((cr: ChannelResult) => cr.status === 'closed');
 
+    const proposedResult = await this.handleProposedChannel(proposedChannels);
+    const runningResult = await this.handleRunningChannels(runningChannels);
+
+    this.logger.debug('Proposed outbox', proposedResult?.outbox);
+    this.logger.debug('running outbox', runningResult?.outbox);
+
+    this.logger.debug('pushMessageoutbox ', pushMessageResults.outbox);
     const updatedResults = _.compact([
       pushMessageResults,
-      await this.handleProposedChannel(proposedChannels),
-      await this.handleRunningChannels(runningChannels),
-      await this.handleClosedChannels(closedChannels)
+      proposedResult,
+      runningResult,
+      undefined
     ]);
 
     const {outbox} = Wallet.mergeOutputs(updatedResults);
