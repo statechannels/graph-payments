@@ -154,7 +154,8 @@ export const mockCloseChannelMessage = (indexerAddress: string): WireMessage => 
           type: 'CloseChannel',
           data: {
             fundingStrategy: 'Direct',
-            targetChannelId
+            targetChannelId,
+            txSubmitterOrder: [1, 0]
           },
           participants: state.participants
         }
