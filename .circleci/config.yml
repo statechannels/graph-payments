@@ -289,21 +289,21 @@ workflows:
   graph-payments:
     jobs:
       - build
-      - test:
-          requires:
-            - build
+      # - test:
+      #     requires:
+      #       - build
       - e2e-test:
           requires:
             - build
-      - stress-test:
-          requires:
-            - build
-      - stress-test-threaded:
-          requires:
-            - build
-      - profile:
-          requires:
-            - build
-      - profile-threaded:
-          requires:
-            - build
+      # - stress-test:
+      #     requires:
+      #       - build
+      # - stress-test-threaded:
+      #     requires:
+      #       - build
+      # - profile:
+      #     requires:
+      #       - build
+      # - profile-threaded:
+      #     requires:
+      #       - build
