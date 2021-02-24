@@ -2339,10 +2339,10 @@
   resolved "https://registry.npmjs.org/@solidity-parser/parser/-/parser-0.7.1.tgz#660210130e4237476cb55e2882064809f80f861e"
   integrity sha512-5ma2uuwPAEX1TPl2rAPAAuGlBkKnn2oUKQvnhTFlDIB8U/KDWX77FpHtL6Rcz+OwqSCWx9IClxACgyIEJ/GhIw==
 
-"@statechannels/client-api-schema@0.10.0":
-  version "0.10.0"
-  resolved "https://registry.npmjs.org/@statechannels/client-api-schema/-/client-api-schema-0.10.0.tgz#ebbcfbe0e2eeefd09163b809ae42c5ac1d7dc07d"
-  integrity sha512-eq2UMa4J9dwvA7ntSPanemwQfCVuqSNcIxbnY3sDbiBy6rjrkqwjcPK0c3sUyeMrfHVDkMJNI9fPw9PP3FW53g==
+"@statechannels/client-api-schema@0.10.1":
+  version "0.10.1"
+  resolved "https://registry.npmjs.org/@statechannels/client-api-schema/-/client-api-schema-0.10.1.tgz#8906ead3f82b103f75d996437b228c9eee6bb663"
+  integrity sha512-Fo2GfLpjSM5haHAobu96B+oemDK6Blp49/3mNXaAc2/jUCJ6cOfMxlcqDfk/FZP+QDXQ2AyAmxqQIIF1Z6uBhQ==
   dependencies:
     ajv "6.11.0"
 
@@ -2380,18 +2380,18 @@
     lodash.pick "4.4.0"
     lodash.shuffle "^4.2.0"
 
-"@statechannels/server-wallet@1.22.0":
-  version "1.22.0"
-  resolved "https://registry.npmjs.org/@statechannels/server-wallet/-/server-wallet-1.22.0.tgz#502ca870f18b80ee60cce9c1a6d3c925f84b0098"
-  integrity sha512-l+15+AfuRsj6eFfnLxTikxiWY59noF76LYRVnAnrkM+O690raEJaAeJg7O/LdXYmjJitVwsyIy61+aw4r1gnTA==
+"@statechannels/server-wallet@1.23.0":
+  version "1.23.0"
+  resolved "https://registry.npmjs.org/@statechannels/server-wallet/-/server-wallet-1.23.0.tgz#f2dd07180d459817298b4f4777b03b6eb32518d9"
+  integrity sha512-kE6C/FQSB3gKpoXogxU4pM0Cf9XTvWsrk2bMa7xG/ArM6eYvRiIDcesQYF/TvRB7ZmK3ukJIhF82JgWaLKqM3w==
   dependencies:
     "@connext/pure-evm-wasm" "0.1.4"
     "@ethersproject/experimental" "5.0.5"
-    "@statechannels/client-api-schema" "0.10.0"
+    "@statechannels/client-api-schema" "0.10.1"
     "@statechannels/nitro-protocol" "0.16.0"
-    "@statechannels/wallet-core" "0.13.0"
+    "@statechannels/wallet-core" "0.14.0"
     "@statechannels/wasm-utils" "0.1.6"
-    "@statechannels/wire-format" "0.8.8"
+    "@statechannels/wire-format" "0.9.0"
     ethers "5.0.12"
     eventemitter3 "4.0.7"
     fp-ts "2.7.0"
@@ -2407,13 +2407,13 @@
     rxjs "6.6.3"
     tarn "3.0.0"
 
-"@statechannels/wallet-core@0.13.0":
-  version "0.13.0"
-  resolved "https://registry.npmjs.org/@statechannels/wallet-core/-/wallet-core-0.13.0.tgz#83243c6b3de4b90afbeaaeb0e7df33513f41ee0f"
-  integrity sha512-WcnnG10dGOkSHM71Zn5CsFkavtgjg+6pMluI0OkarO4soabamasQy51EDbAzFbe1AiEJIzgFl0kSl+C9XVjsZQ==
+"@statechannels/wallet-core@0.14.0":
+  version "0.14.0"
+  resolved "https://registry.npmjs.org/@statechannels/wallet-core/-/wallet-core-0.14.0.tgz#cf14bae21b472b326d9b890754eb065e27a9175a"
+  integrity sha512-GtLTFSQ4CSY3KebjIwDvJQ7ZQZ1Xv0tp6c/lnRgCsZcjout5ZwaLvMiImD0Sxzz5qLaHE96fHjNUmtCekNb4tQ==
   dependencies:
     "@statechannels/nitro-protocol" "0.16.0"
-    "@statechannels/wire-format" "0.8.8"
+    "@statechannels/wire-format" "0.9.0"
     ethers "5.0.12"
     lodash "4.17.20"
 
@@ -2422,10 +2422,10 @@
   resolved "https://registry.npmjs.org/@statechannels/wasm-utils/-/wasm-utils-0.1.6.tgz#2b0b7de5a63f158d4202718ebb5bdd3a910b0c6c"
   integrity sha512-eUBeE/ChxksfhrGHwsdxx5ncvZnY4JkdBta6Y8mcgtJxQxdoxjqrJYiBbyZY5LqgW9mPowAaRQ09gm6Eebf4mQ==
 
-"@statechannels/wire-format@0.8.8":
-  version "0.8.8"
-  resolved "https://registry.npmjs.org/@statechannels/wire-format/-/wire-format-0.8.8.tgz#9175b45e6ea9888a7533a1c34bf54407ee7a2603"
-  integrity sha512-mBvcP8/4vCVyNaQGqC08YWI+pWlgTgQg4gO5QmFB+ScuTsI7l0fS04+6PyH6T1UzzuzeHNfRO+u260w3WcU4Ug==
+"@statechannels/wire-format@0.9.0":
+  version "0.9.0"
+  resolved "https://registry.npmjs.org/@statechannels/wire-format/-/wire-format-0.9.0.tgz#66414ccc93089591b1b61ced29dbae3f14264cd8"
+  integrity sha512-R0e0oDRW4Is4lyc9yZhWspe8ml7rASRpqMyi1+aMe88qddhhFfmOksE7LGZaTk2LTZGZryHweEHX9eYQ6r0e+A==
   dependencies:
     ajv "6.11.0"
 
