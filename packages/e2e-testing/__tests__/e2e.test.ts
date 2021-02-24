@@ -170,6 +170,8 @@ describe('Payment & Receipt Managers E2E', () => {
 
     for (const {status} of receiptChannels) expect(status).toBe('closed');
     for (const {status} of paymentChannels) expect(status).toBe('closed');
+
+    expect(true).toBe(false);
   });
 
   test('Payment and Receipt can get back in sync if indexer offline', async () => {
