@@ -45,6 +45,20 @@ commands:
           path: /root/<< parameters.file >>.txt
           destination: << parameters.file >>
 
+  store_db_on_fail:
+    description: 'Saves DB to artifacts'
+    parameters:
+      db:
+        type: string
+    steps:
+        - run:
+            when: on_fail
+            name: 'Store Receipt DB'
+            path: 'packages/e2e-testing'
+            command: 'pg_dump -h localhost -p 5432 -U postgres <<parameters.db>> > /tmp/<<parameters.db>>_db.sql'
+        - store_artifacts:
+            path: /tmp/<<parameters.db>>_db.sql 
+
 
   install_postgresql_client:
     description: 'Install postgresql client'
@@ -53,10 +67,18 @@ commands:
           name: Install netcat
           command: sudo apt install --assume-yes netcat
       - run:
+          # We require v11 of postgres client to export the database
+          # To do this we manually install the correct version from postgres own apt repository
+          # See https://dba.stackexchange.com/questions/259784/how-to-install-postgresql-client-11-on-ubuntu-18-04
           command: |
             seq 1 8 | xargs -I{} mkdir -p /usr/share/man/man{} 
             sudo apt-get update
-            sudo apt install -y postgresql-client || true
+            sudo apt-get install -y curl ca-certificates gnupg 
+            curl https://www.postgresql.org/media/keys/ACCC4CF8.asc | sudo apt-key add -
+            sudo sh -c 'echo "deb http://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" > /etc/apt/sources.list.d/pgdg.list'
+            sudo apt-get update
+            sudo apt install -y postgresql-client-11 || true
+
   create_db:
     description: 'Creates a database'
     parameters:
@@ -188,6 +210,11 @@ jobs:
           path: /tmp/e2e-test-with-ledger-with-chain.log
       - upload_logs:
           file: e2e-stats
+      - store_db_on_fail:
+          db: payer 
+      - store_db_on_fail:
+          db: receipt
+
 
 
   stress-test:
