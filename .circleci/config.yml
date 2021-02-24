@@ -190,14 +190,14 @@ jobs:
           name: 'E2E tests (with chain, with ledger)'
           path: 'packages/e2e-testing'
           command: 'USE_LEDGER=true yarn test:e2e:chain'
-      - run:
-          name: 'E2E tests (no chain, with ledger)'
-          path: 'packages/e2e-testing'
-          command: 'USE_LEDGER=true yarn test:e2e'
-      - run:
-          name: 'E2E tests (no chain)'
-          path: 'packages/e2e-testing'
-          command: 'yarn test:e2e'
+      # - run:
+      #     name: 'E2E tests (no chain, with ledger)'
+      #     path: 'packages/e2e-testing'
+      #     command: 'USE_LEDGER=true yarn test:e2e'
+      # - run:
+      #     name: 'E2E tests (no chain)'
+      #     path: 'packages/e2e-testing'
+      #     command: 'yarn test:e2e'
       - store_artifacts:
           path: /tmp/e2e-test-with-ledger-without-chain.log
       - store_artifacts:
