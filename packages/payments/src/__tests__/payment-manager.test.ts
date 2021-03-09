@@ -97,8 +97,8 @@ beforeAll(async (done) => {
     defaultTestConfig({
       databaseConfiguration: {connection: {database: PAYMENT_MANAGER_TEST_DB_NAME}},
       networkConfiguration: {
-        chainNetworkID: process.env.CHAIN_ID
-          ? parseInt(process.env.CHAIN_ID)
+        chainNetworkID: process.env.CHAIN_NETWORK_ID
+          ? parseInt(process.env.CHAIN_NETWORK_ID)
           : defaultTestConfig().networkConfiguration.chainNetworkID
       },
       chainServiceConfiguration: {
